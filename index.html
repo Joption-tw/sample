@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雙賣平衡 即時績效 (歐大專業版) - V1.9.0</title>
+    <title>雙賣平衡 即時績效 (歐大專業版) - V1.9.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <style>
         body { 
             background-color: #f8fafc; 
@@ -108,7 +108,7 @@
             <div class="text-center px-2">
                 <h1 class="text-xl sm:text-3xl md:text-4xl font-black text-slate-800 tracking-tighter mb-0.5 sm:mb-1">雙賣平衡 即時績效</h1>
                 <div class="flex items-center justify-center gap-2">
-                    <span class="text-[10px] sm:text-[12px] font-bold text-slate-400 uppercase tracking-widest">專業版 V1.9.0</span>
+                    <span class="text-[10px] sm:text-[12px] font-bold text-slate-400 uppercase tracking-widest">專業版 V1.9.1</span>
                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-[9px] sm:text-[10px] font-bold text-emerald-600 live-indicator">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> LIVE
                     </span>
@@ -288,7 +288,7 @@
             return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
         }
 
-        function exportExcel() {
+        async function exportExcel() {
             if (!globalData || currentSessionIdx === -1) return;
             const r = rowRanges[currentSessionIdx];
             const si = r.start - 2;
@@ -304,23 +304,34 @@
             const total    = globalData.yTotal.slice(si, ei + 1);
             const totalRaw = globalData.yTotalRaw.slice(si, ei + 1);
 
+            const now = new Date(); const pad = n => n.toString().padStart(2, '0');
+            const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
+            const sessionLabel = rowRanges[currentSessionIdx].label;
+
+            const wb = new ExcelJS.Workbook();
+            wb.creator = 'Joption';
+            wb.created = now;
+
+            // ── 共用：欄標題樣式 ───────────────────────────────────────────
+            const hdrStyle = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }, alignment: { horizontal: 'center' } };
+            function applyHeader(ws, cols) {
+                const row = ws.addRow(cols);
+                row.eachCell(c => { c.font = hdrStyle.font; c.fill = hdrStyle.fill; c.alignment = hdrStyle.alignment; });
+                row.height = 18;
+            }
+            function setColWidths(ws, widths) {
+                widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+            }
+
             // ── Sheet 1：原始資料 ──────────────────────────────────────────
-            const rawSheet = [['時間', '期指(原始)', '期指(平滑)', '獲利率%', '週三時價', '週五時價', '總點數(原始)', '總點數(平滑)']];
+            const ws1 = wb.addWorksheet('原始資料');
+            applyHeader(ws1, ['時間', '期指(原始)', '期指(平滑)', '獲利率%', '週三時價', '週五時價', '總點數(原始)', '總點數(平滑)']);
+            setColWidths(ws1, [12, 12, 12, 10, 10, 10, 14, 14]);
             for (let i = 0; i < labels.length; i++) {
-                rawSheet.push([
-                    labels[i],
-                    priceRaw[i] ?? '',
-                    price[i]    ?? '',
-                    profit[i]   ?? '',
-                    wed[i]      ?? '',
-                    fri[i]      ?? '',
-                    totalRaw[i] ?? '',
-                    total[i]    ?? '',
-                ]);
+                ws1.addRow([labels[i], priceRaw[i] ?? null, price[i] ?? null, profit[i] ?? null, wed[i] ?? null, fri[i] ?? null, totalRaw[i] ?? null, total[i] ?? null]);
             }
 
             // ── Sheet 2：每分鐘內插 ────────────────────────────────────────
-            // 解析各點的分鐘數（處理跨午夜）
             const mins = [];
             let prevMin = null;
             for (let i = 0; i < labels.length; i++) {
@@ -328,35 +339,40 @@
                 mins.push(m);
                 if (m !== null) prevMin = m;
             }
-
-            // 找出有效範圍
             const validMins = mins.filter(v => v !== null);
-            if (validMins.length < 2) return;
-            const minT = validMins[0];
-            const maxT = validMins[validMins.length - 1];
-
-            const interpSheet = [['時間', '期指(原始)內插', '期指(平滑)內插', '獲利率%內插', '週三時價內插', '週五時價內插', '總點數內插']];
-            for (let t = minT; t <= maxT; t++) {
-                interpSheet.push([
-                    fmtMin(t),
-                    lerp(mins, priceRaw, t) !== null ? +lerp(mins, priceRaw, t).toFixed(1) : '',
-                    lerp(mins, price, t)    !== null ? +lerp(mins, price, t).toFixed(1)    : '',
-                    lerp(mins, profit, t)   !== null ? +lerp(mins, profit, t).toFixed(4)   : '',
-                    lerp(mins, wed, t)      !== null ? +lerp(mins, wed, t).toFixed(0)      : '',
-                    lerp(mins, fri, t)      !== null ? +lerp(mins, fri, t).toFixed(0)      : '',
-                    lerp(mins, total, t)    !== null ? +lerp(mins, total, t).toFixed(1)    : '',
-                ]);
+            if (validMins.length >= 2) {
+                const ws2 = wb.addWorksheet('每分鐘內插');
+                applyHeader(ws2, ['時間', '期指(原始)', '期指(平滑)', '獲利率%', '週三時價', '週五時價', '總點數']);
+                setColWidths(ws2, [10, 12, 12, 10, 10, 10, 12]);
+                const minT = validMins[0], maxT = validMins[validMins.length - 1];
+                for (let t = minT; t <= maxT; t++) {
+                    const v = (arr, dp) => { const r = lerp(mins, arr, t); return r !== null ? +r.toFixed(dp) : null; };
+                    ws2.addRow([fmtMin(t), v(priceRaw,1), v(price,1), v(profit,4), v(wed,0), v(fri,0), v(total,1)]);
+                }
             }
 
-            // ── 組合 Excel 並下載 ──────────────────────────────────────────
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rawSheet),    '原始資料');
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(interpSheet), '每分鐘內插');
+            // ── Sheet 3：績效圖（ECharts 截圖嵌入） ────────────────────────
+            if (myChart) {
+                try {
+                    const dataUrl = myChart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#f8fafc' });
+                    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+                    const ws3 = wb.addWorksheet('績效圖');
+                    ws3.getCell('A1').value = `${sessionLabel} 績效圖表`;
+                    ws3.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF1E3A5F' } };
+                    const imgId = wb.addImage({ base64, extension: 'png' });
+                    ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1100, height: 550 } });
+                    ws3.getColumn(1).width = 15;
+                } catch (e) { console.warn('圖表嵌入失敗', e); }
+            }
 
-            const now = new Date(); const pad = n => n.toString().padStart(2, '0');
-            const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
-            const sessionLabel = rowRanges[currentSessionIdx].label;
-            XLSX.writeFile(wb, `雙賣平衡_${sessionLabel}_${ts}.xlsx`);
+            // ── 下載 ──────────────────────────────────────────────────────
+            const buf = await wb.xlsx.writeBuffer();
+            const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `雙賣平衡_${sessionLabel}_${ts}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         async function takeScreenshot() {
@@ -384,7 +400,7 @@
                 link.href = canvas.toDataURL('image/jpeg', 0.95);
                 link.click();
                 // 同步匯出 Excel
-                try { exportExcel(); } catch(exErr) { console.warn("Excel 匯出失敗", exErr); }
+                try { await exportExcel(); } catch(exErr) { console.warn("Excel 匯出失敗", exErr); }
             } catch (e) { console.error("截圖失敗", e); }
             finally { loading.style.opacity = '0'; setTimeout(() => { loading.classList.add('hidden'); msgEl.innerText = "數據同步處理中"; }, 300); }
         }
