@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雙賣平衡 即時績效 (歐大專業版) - V1.9.2</title>
+    <title>雙賣平衡 即時績效 (歐大專業版) - V1.9.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -108,7 +108,7 @@
             <div class="text-center px-2">
                 <h1 class="text-xl sm:text-3xl md:text-4xl font-black text-slate-800 tracking-tighter mb-0.5 sm:mb-1">雙賣平衡 即時績效</h1>
                 <div class="flex items-center justify-center gap-2">
-                    <span class="text-[10px] sm:text-[12px] font-bold text-slate-400 uppercase tracking-widest">專業版 V1.9.2</span>
+                    <span class="text-[10px] sm:text-[12px] font-bold text-slate-400 uppercase tracking-widest">專業版 V1.9.3</span>
                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-[9px] sm:text-[10px] font-bold text-emerald-600 live-indicator">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> LIVE
                     </span>
@@ -544,7 +544,7 @@
                 { name: '總點數', data: axisState.lTot ? globalData.yTotal : [], markPoint: axisState.lTot ? getMarkPoint('總點數', 'val') : { data: [] } }
             ];
             const yAxes = [
-                { type: 'value', name: '期指', position: 'left', offset: 0, show: axisState.lIdx, axisLabel: { color: '#2563eb', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, min: 25000, max: 35000 },
+                { type: 'value', name: '期指', position: 'left', offset: 0, show: axisState.lIdx, axisLabel: { color: '#2563eb', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, min: 'dataMin', max: 'dataMax', scale: true },
                 { type: 'value', name: '總點', position: 'left', offset: axisState.lIdx ? 50 : 0, show: axisState.lTot, axisLabel: { color: '#475569', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: 0, max: 5000 },
                 { type: 'value', name: '獲利%', position: 'right', offset: 0, show: axisState.rPrf, axisLabel: { color: '#e11d48', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: -1, max: 5 },
                 { type: 'value', name: '時價', position: 'right', offset: axisState.rPrf ? 50 : 0, show: axisState.rTmv, axisLabel: { color: '#9333ea', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false } }
@@ -615,7 +615,7 @@
             let batch = [{ dataZoomIndex: 0, start: sPct, end: ePct }];
             if (axisState.lIdx) {
                 const sp = globalData.yPrice.slice(si, ei + 1).filter(v => v !== null);
-                if (sp.length > 0) batch.push({ dataZoomIndex: 1, start: getPct(Math.min(...sp)*0.998, 25000, 35000), end: getPct(Math.max(...sp)*1.002, 25000, 35000) });
+                if (sp.length > 0) { const pMin = Math.min(...sp)*0.998, pMax = Math.max(...sp)*1.002; batch.push({ dataZoomIndex: 1, start: getPct(pMin, pMin, pMax), end: getPct(pMax, pMin, pMax) }); }
             }
             if (axisState.lTot) {
                 const st = globalData.yTotal.slice(si, ei + 1).filter(v => v !== null);
