@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雙賣平衡 即時績效 (歐大專業版) - V1.9.5</title>
+    <title>雙賣平衡 即時績效 (歐大專業版) - V1.9.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -221,6 +221,36 @@
             { label: '週三早', start: 2700, end: 2849, type: 'day' }   
         ];
 
+        // --- 依時間裁切 session 範圍（只顯示當盤時段數據）---
+        function parseTimeMins(label) {
+            // label 格式可能是 "2024/04/14 8:45" 或 "8:45"
+            const timeStr = label.includes(' ') ? label.split(' ').pop() : label;
+            const m = timeStr.match(/^(\d{1,2}):(\d{2})/);
+            if (!m) return null;
+            return parseInt(m[1]) * 60 + parseInt(m[2]);
+        }
+
+        function trimSessionByTime(si, ei, type) {
+            // 早盤 08:45~13:45 / 夜盤 15:00~05:00(跨午夜)
+            const dayStart = 8 * 60 + 45, dayEnd = 13 * 60 + 45;
+            const nightStart = 15 * 60, nightEnd = 5 * 60; // 300
+
+            function inBound(t) {
+                if (t === null) return false;
+                if (type === 'day') return t >= dayStart && t <= dayEnd;
+                else return t >= nightStart || t <= nightEnd; // 夜盤跨午夜
+            }
+
+            let newSi = si, newEi = ei;
+            for (let i = si; i <= ei; i++) {
+                if (inBound(parseTimeMins(globalData.x[i]))) { newSi = i; break; }
+            }
+            for (let i = ei; i >= si; i--) {
+                if (inBound(parseTimeMins(globalData.x[i]))) { newEi = i; break; }
+            }
+            return { si: newSi, ei: newEi };
+        }
+
         // --- 百點震幅計算演算法 (導入自 index.html) ---
         function calculateSwing100(prices, threshold = 100) {
             const valid = prices.filter(p => p !== null);
@@ -293,9 +323,10 @@
         async function exportExcel() {
             if (!globalData || currentSessionIdx === -1) return;
             const r = rowRanges[currentSessionIdx];
-            const si = r.start - 2;
-            const ei = Math.min(r.end - 2, globalData.x.length - 1);
-            if (si >= globalData.x.length) return;
+            const rawSi = r.start - 2;
+            const rawEi = Math.min(r.end - 2, globalData.x.length - 1);
+            if (rawSi >= globalData.x.length) return;
+            const { si, ei } = trimSessionByTime(rawSi, rawEi, r.type);
 
             const labels   = globalData.x.slice(si, ei + 1);
             const price    = globalData.yPrice.slice(si, ei + 1);
@@ -568,7 +599,13 @@
             if (!globalData || idx === -1 || !myChart) return;
             currentSessionIdx = idx;
             document.querySelectorAll('.session-btn').forEach((btn, i) => btn.classList.toggle('active', i === idx));
-            const r = rowRanges[idx]; const si = r.start - 2; const ei = Math.min(r.end - 2, globalData.x.length - 1);
+            const r = rowRanges[idx];
+            const { si, ei } = (() => {
+                const rawSi = r.start - 2;
+                const rawEi = Math.min(r.end - 2, globalData.x.length - 1);
+                if (rawSi >= globalData.x.length) return { si: rawSi, ei: rawEi };
+                return trimSessionByTime(rawSi, rawEi, r.type);
+            })();
             if (si >= globalData.x.length) return;
 
             const sx = globalData.x.slice(si, ei + 1);
