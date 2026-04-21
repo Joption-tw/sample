@@ -10,9 +10,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <style>
-        body { 
-            background-color: #f8fafc; 
-            color: #1e293b; 
+        body {
+            background-color: #f8fafc;
+            color: #1e293b;
             font-family: Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             -webkit-tap-highlight-color: transparent;
         }
@@ -22,20 +22,20 @@
             border-radius: 0.75rem;
             box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
         }
-        #performance-chart { 
-            height: 500px; 
-            width: 100%; 
+        #performance-chart {
+            height: 500px;
+            width: 100%;
         }
         @media (min-width: 768px) {
             #performance-chart { height: 600px; }
         }
-        
+
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        
+
         .stat-value { font-family: Arial, sans-serif; }
-        
+
         .session-btn {
             width: 100%;
             padding: 0.5rem 0.25rem;
@@ -95,7 +95,7 @@
 </head>
 <body class="p-1.5 sm:p-4">
     <div id="capture-root" class="max-w-[1700px] mx-auto space-y-2 sm:space-y-3 p-1 sm:p-2 bg-[#f8fafc]">
-        
+
         <header class="flex flex-col sm:grid sm:grid-cols-[auto_1fr_auto] items-center glass-card px-3 sm:px-6 py-3 sm:py-4 gap-3 min-h-[70px]">
             <div class="flex items-center justify-between w-full sm:w-auto">
                 <div class="bg-blue-600 p-0.5 rounded-lg shadow-sm overflow-hidden flex items-center justify-center w-10 h-10 sm:w-14 sm:h-14">
@@ -197,7 +197,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div id="performance-chart"></div>
         </div>
 
@@ -239,23 +239,23 @@
         const CSV_URL = location.hostname.includes('github.io')
             ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`
             : '/api/sheet';
-        
+
         let myChart = null;
         let globalData = null;
         let currentSessionIdx = -1;
         let axisState = { lIdx: false, lTot: true, rPrf: true, rTmv: true };
 
         const rowRanges = [
-            { label: '周三晚', start: 2, end: 419, type: 'night' }, 
-            { label: '週四早', start: 420, end: 569, type: 'day' },   
-            { label: '週四晚', start: 570, end: 989, type: 'night' }, 
-            { label: '週五早', start: 990, end: 1139, type: 'day' },  
+            { label: '周三晚', start: 2, end: 419, type: 'night' },
+            { label: '週四早', start: 420, end: 569, type: 'day' },
+            { label: '週四晚', start: 570, end: 989, type: 'night' },
+            { label: '週五早', start: 990, end: 1139, type: 'day' },
             { label: '週五晚', start: 1140, end: 1559, type: 'night' },
-            { label: '周一早', start: 1560, end: 1709, type: 'day' },  
+            { label: '周一早', start: 1560, end: 1709, type: 'day' },
             { label: '周一晚', start: 1710, end: 2129, type: 'night' },
-            { label: '週二早', start: 2130, end: 2279, type: 'day' },  
+            { label: '週二早', start: 2130, end: 2279, type: 'day' },
             { label: '周二晚', start: 2280, end: 2699, type: 'night' },
-            { label: '週三早', start: 2700, end: 2849, type: 'day' }   
+            { label: '週三早', start: 2700, end: 2849, type: 'day' }
         ];
 
         // --- 依時間裁切 session 範圍（只顯示當盤時段數據）---
@@ -292,7 +292,7 @@
         function calculateSwing100(prices, threshold = 100) {
             const valid = prices.filter(p => p !== null);
             if (valid.length < 2) return 0;
-            
+
             let totalSwing = 0;
             let lastPivot = valid[0];
             let currentHigh = valid[0];
@@ -321,7 +321,7 @@
             // 處理最後一個未完成波段
             if (trend === 1 && currentHigh > lastPivot + threshold) totalSwing += (currentHigh - lastPivot);
             else if (trend === -1 && currentLow < lastPivot - threshold) totalSwing += (lastPivot - currentLow);
-            
+
             return totalSwing;
         }
 
@@ -537,13 +537,13 @@
                     if (cols.length >= 54) {
                         raw.x.push(cols[0]);
                         const p = rawNumeric(cols[22]);
-                        raw.yPriceRaw.push(p); 
-                        raw.yPrice.push(p); 
-                        raw.yProfit.push(rawNumeric(cols[26])); 
-                        raw.yTimeWed.push(rawNumeric(cols[52])); 
-                        raw.yTimeFri.push(rawNumeric(cols[53])); 
+                        raw.yPriceRaw.push(p);
+                        raw.yPrice.push(p);
+                        raw.yProfit.push(rawNumeric(cols[26]));
+                        raw.yTimeWed.push(rawNumeric(cols[52]));
+                        raw.yTimeFri.push(rawNumeric(cols[53]));
                         const totalPoint = rawNumeric(cols[12]);
-                        raw.yTotal.push(totalPoint); 
+                        raw.yTotal.push(totalPoint);
                         raw.yTotalRaw.push(totalPoint);
                     }
                 }
@@ -572,7 +572,7 @@
                         });
                         let autoIdx = getAutoSessionIndex();
                         if ((rowRanges[autoIdx].start - 2) >= globalData.x.length) {
-                            let lv = rowRanges.length - 1; 
+                            let lv = rowRanges.length - 1;
                             while(lv >= 0 && (rowRanges[lv].start - 2) >= globalData.x.length) lv--;
                             autoIdx = lv;
                         }
@@ -591,6 +591,14 @@
             axisState[key] = !axisState[key];
             updateChartUI();
         }
+
+        const PROFIT_VISUAL_MAP = {
+            show: false, type: 'piecewise', dimension: 1, seriesIndex: [1],
+            pieces: [
+                { gte: 0, color: 'rgba(225, 29, 72, 0.55)' },
+                { lt: 0, color: 'rgba(134, 239, 172, 0.65)' }
+            ]
+        };
 
         function updateChartUI() {
             if (!myChart || !globalData) return;
@@ -628,7 +636,7 @@
             ];
             const isMobile = window.innerWidth < 768;
             const dZoom = [ { type: 'slider', xAxisIndex: 0, bottom: 0, height: 20 }, { type: 'slider', yAxisIndex: 0, left: 0, width: 18, show: axisState.lIdx }, { type: 'slider', yAxisIndex: 1, left: axisState.lIdx ? 40 : 0, width: 18, show: axisState.lTot }, { type: 'slider', yAxisIndex: 2, right: 0, width: 18, show: axisState.rPrf }, { type: 'slider', yAxisIndex: 3, right: axisState.rPrf ? 40 : 0, width: 18, show: axisState.rTmv }, { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile } ];
-            myChart.setOption({ textStyle: { fontFamily: 'Arial' }, grid: { left: (leftAxesCount * 55) + 15, right: (rightAxesCount * 55) + 15, top: '8%', bottom: '15%' }, yAxis: yAxes, dataZoom: dZoom, series: seriesConfig.map(s => ({ name: s.name, data: s.data, markPoint: s.markPoint })) });
+            myChart.setOption({ textStyle: { fontFamily: 'Arial' }, grid: { left: (leftAxesCount * 55) + 15, right: (rightAxesCount * 55) + 15, top: '8%', bottom: '15%' }, yAxis: yAxes, dataZoom: dZoom, visualMap: PROFIT_VISUAL_MAP, series: seriesConfig.map(s => ({ name: s.name, data: s.data, markPoint: s.markPoint })) });
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
         }
 
@@ -646,7 +654,7 @@
             if (si >= globalData.x.length) return;
 
             const sx = globalData.x.slice(si, ei + 1);
-            const spRaw = globalData.yPriceRaw.slice(si, ei + 1); 
+            const spRaw = globalData.yPriceRaw.slice(si, ei + 1);
             const spr = globalData.yProfit.slice(si, ei + 1).filter(v => v !== null);
             const sw = globalData.yTimeWed.slice(si, ei + 1).filter(v => v !== null);
             const sf = globalData.yTimeFri.slice(si, ei + 1).filter(v => v !== null);
@@ -682,7 +690,7 @@
             }
             renderChg('stat-wed-chg', calcChg(globalData.yTimeWed.slice(si, ei + 1)));
             renderChg('stat-fri-chg', calcChg(globalData.yTimeFri.slice(si, ei + 1)));
-            
+
             let entry = "--", exit = "--";
             for(let i=0; i<stRaw.length; i++) { if(stRaw[i] !== 0 && stRaw[i] !== null) { entry = sx[i].split(' ')[1] || sx[i]; break; } }
             if(entry !== "--") {
@@ -741,7 +749,7 @@
                 xAxis: { type: 'category', data: data.x, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 10, rotate: 30, fontFamily: 'Arial' }, axisLine: { lineStyle: { color: '#f1f5f9' } } },
                 yAxis: [ { type: 'value', name: '期指', position: 'left' }, { type: 'value', name: '總點', position: 'left' }, { type: 'value', name: '獲利%', position: 'right' }, { type: 'value', name: '時價', position: 'right' } ],
                 dataZoom: [ { type: 'slider', xAxisIndex: 0 }, { type: 'slider', yAxisIndex: 0 }, { type: 'slider', yAxisIndex: 1 }, { type: 'slider', yAxisIndex: 2 }, { type: 'slider', yAxisIndex: 3 }, { type: 'inside', xAxisIndex: 0 } ],
-                visualMap: { show: false, type: 'piecewise', dimension: 1, seriesIndex: [1], pieces: [{ gte: 0, color: 'rgba(225, 29, 72, 0.55)' }, { lt: 0, color: 'rgba(134, 239, 172, 0.65)' }] },
+                visualMap: PROFIT_VISUAL_MAP,
                 series: [
                     { type: 'line', data: [], markArea: { silent: true, data: markAreas }, silent: true },
                     { name: '獲利率', type: 'line', yAxisIndex: 2, data: data.yProfit, smooth: true, showSymbol: false, lineStyle: { width: 0 }, areaStyle: {}, z: 1 },
