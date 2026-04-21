@@ -258,9 +258,7 @@
             { label: '週三早', start: 2700, end: 2849, type: 'day' }
         ];
 
-        // --- 依時間裁切 session 範圍（只顯示當盤時段數據）---
         function parseTimeMins(label) {
-            // label 格式可能是 "2024/04/14 8:45" 或 "8:45"
             const timeStr = label.includes(' ') ? label.split(' ').pop() : label;
             const m = timeStr.match(/^(\d{1,2}):(\d{2})/);
             if (!m) return null;
@@ -268,14 +266,13 @@
         }
 
         function trimSessionByTime(si, ei, type) {
-            // 早盤 08:45~13:45 / 夜盤 15:00~05:00(跨午夜)
             const dayStart = 8 * 60 + 45, dayEnd = 13 * 60 + 45;
-            const nightStart = 15 * 60, nightEnd = 5 * 60; // 300
+            const nightStart = 15 * 60, nightEnd = 5 * 60;
 
             function inBound(t) {
                 if (t === null) return false;
                 if (type === 'day') return t >= dayStart && t <= dayEnd;
-                else return t >= nightStart || t <= nightEnd; // 夜盤跨午夜
+                else return t >= nightStart || t <= nightEnd;
             }
 
             let newSi = si, newEi = ei;
@@ -288,7 +285,6 @@
             return { si: newSi, ei: newEi };
         }
 
-        // --- 百點震幅計算演算法 (導入自 index.html) ---
         function calculateSwing100(prices, threshold = 100) {
             const valid = prices.filter(p => p !== null);
             if (valid.length < 2) return 0;
@@ -297,7 +293,7 @@
             let lastPivot = valid[0];
             let currentHigh = valid[0];
             let currentLow = valid[0];
-            let trend = 0; // 0: 無趨勢, 1: 漲, -1: 跌
+            let trend = 0;
 
             for (let i = 1; i < valid.length; i++) {
                 let p = valid[i];
@@ -318,28 +314,24 @@
                     }
                 }
             }
-            // 處理最後一個未完成波段
             if (trend === 1 && currentHigh > lastPivot + threshold) totalSwing += (currentHigh - lastPivot);
             else if (trend === -1 && currentLow < lastPivot - threshold) totalSwing += (lastPivot - currentLow);
 
             return totalSwing;
         }
 
-        // ── 時間字串解析為當日分鐘數（支援跨午夜） ────────────────────────
         function parseMinutes(label, prevMin) {
             const parts = (label || '').trim().split(/\s+/);
             const timePart = parts.length >= 2 ? parts[parts.length - 1] : parts[0];
             const m = timePart.match(/(\d{1,2}):(\d{2})/);
             if (!m) return null;
             let mins = parseInt(m[1]) * 60 + parseInt(m[2]);
-            // 跨午夜：若比前一筆小超過 120 分鐘，代表過了 00:00
             if (prevMin !== null && prevMin !== undefined && mins + 1440 - prevMin < 360 && mins < prevMin) {
                 mins += 1440;
             }
             return mins;
         }
 
-        // 線性內插：在 x=t 點對陣列 vals（對應 mins 陣列）取值
         function lerp(mins, vals, t) {
             for (let i = 0; i < mins.length - 1; i++) {
                 if (mins[i] <= t && t <= mins[i + 1]) {
@@ -382,7 +374,6 @@
             wb.creator = 'Joption';
             wb.created = now;
 
-            // ── 共用：欄標題樣式 ───────────────────────────────────────────
             const hdrStyle = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }, alignment: { horizontal: 'center' } };
             function applyHeader(ws, cols) {
                 const row = ws.addRow(cols);
@@ -393,7 +384,6 @@
                 widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
             }
 
-            // ── Sheet 1：原始資料 ──────────────────────────────────────────
             const ws1 = wb.addWorksheet('原始資料');
             applyHeader(ws1, ['時間', '期指(原始)', '期指(平滑)', '獲利率%', '週三時價', '週五時價', '總點數(原始)', '總點數(平滑)']);
             setColWidths(ws1, [12, 12, 12, 10, 10, 10, 14, 14]);
@@ -401,7 +391,6 @@
                 ws1.addRow([labels[i], priceRaw[i] ?? null, price[i] ?? null, profit[i] ?? null, wed[i] ?? null, fri[i] ?? null, totalRaw[i] ?? null, total[i] ?? null]);
             }
 
-            // ── Sheet 2：每分鐘內插 ────────────────────────────────────────
             const mins = [];
             let prevMin = null;
             for (let i = 0; i < labels.length; i++) {
@@ -421,7 +410,6 @@
                 }
             }
 
-            // ── Sheet 3：績效圖（ECharts 截圖嵌入） ────────────────────────
             if (myChart) {
                 try {
                     const dataUrl = myChart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#f8fafc' });
@@ -435,7 +423,6 @@
                 } catch (e) { console.warn('圖表嵌入失敗', e); }
             }
 
-            // ── 下載 ──────────────────────────────────────────────────────
             const buf = await wb.xlsx.writeBuffer();
             const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const url = URL.createObjectURL(blob);
@@ -469,22 +456,12 @@
                 link.download = `雙賣平衡績效_${timeStr}.jpg`;
                 link.href = canvas.toDataURL('image/jpeg', 0.95);
                 link.click();
-                // 同步匯出 Excel
                 try { await exportExcel(); } catch(exErr) { console.warn("Excel 匯出失敗", exErr); }
             } catch (e) { console.error("截圖失敗", e); }
             finally { loading.style.opacity = '0'; setTimeout(() => { loading.classList.add('hidden'); msgEl.innerText = "數據同步處理中"; }, 300); }
         }
 
         function getAutoSessionIndex() {
-            // ── 盤別時間定義 ─────────────────────────────────────────
-            // 夜盤  : 15:00 ~ 隔日 05:00
-            // 早盤  : 08:45 ~ 13:45
-            // gap1  : 05:00 ~ 08:44 → 歸入前一夜盤（夜盤剛結束）
-            // gap2  : 13:46 ~ 14:59 → 歸入當天早盤（早盤剛結束）
-            //
-            // hour < 9  : 00:00~08:59 → 前一夜盤（含 gap1）
-            // hour < 15 : 09:00~14:59 → 早盤（含 gap2）
-            // hour >= 15: 15:00~23:59 → 夜盤
             const now = new Date(); const day = now.getDay(); const hour = now.getHours();
             if (day === 1) { if (hour < 9) return 4; if (hour < 15) return 5; return 6; }
             if (day === 2) { if (hour < 9) return 6; if (hour < 15) return 7; return 8; }
@@ -592,14 +569,6 @@
             updateChartUI();
         }
 
-        const PROFIT_VISUAL_MAP = {
-            show: false, type: 'piecewise', dimension: 1, seriesIndex: [1],
-            pieces: [
-                { gte: 0, color: 'rgba(225, 29, 72, 0.55)' },
-                { lt: 0, color: 'rgba(134, 239, 172, 0.65)' }
-            ]
-        };
-
         function updateChartUI() {
             if (!myChart || !globalData) return;
             document.getElementById('btn-l-idx').className = `mode-btn l-idx ${axisState.lIdx ? 'active' : ''}`;
@@ -636,7 +605,7 @@
             ];
             const isMobile = window.innerWidth < 768;
             const dZoom = [ { type: 'slider', xAxisIndex: 0, bottom: 0, height: 20 }, { type: 'slider', yAxisIndex: 0, left: 0, width: 18, show: axisState.lIdx }, { type: 'slider', yAxisIndex: 1, left: axisState.lIdx ? 40 : 0, width: 18, show: axisState.lTot }, { type: 'slider', yAxisIndex: 2, right: 0, width: 18, show: axisState.rPrf }, { type: 'slider', yAxisIndex: 3, right: axisState.rPrf ? 40 : 0, width: 18, show: axisState.rTmv }, { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile } ];
-            myChart.setOption({ textStyle: { fontFamily: 'Arial' }, grid: { left: (leftAxesCount * 55) + 15, right: (rightAxesCount * 55) + 15, top: '8%', bottom: '15%' }, yAxis: yAxes, dataZoom: dZoom, visualMap: PROFIT_VISUAL_MAP, series: seriesConfig.map(s => ({ name: s.name, data: s.data, markPoint: s.markPoint })) });
+            myChart.setOption({ textStyle: { fontFamily: 'Arial' }, grid: { left: (leftAxesCount * 55) + 15, right: (rightAxesCount * 55) + 15, top: '8%', bottom: '15%' }, yAxis: yAxes, dataZoom: dZoom, series: seriesConfig.map(s => ({ name: s.name, data: s.data, markPoint: s.markPoint })) });
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
         }
 
@@ -660,7 +629,6 @@
             const sf = globalData.yTimeFri.slice(si, ei + 1).filter(v => v !== null);
             const stRaw = globalData.yTotalRaw.slice(si, ei + 1);
 
-            // --- 修改：計算並顯示百點震幅 ---
             const swingVal = calculateSwing100(spRaw, 100);
             document.getElementById('stat-swing').innerText = Math.round(swingVal).toLocaleString();
 
@@ -672,7 +640,6 @@
             document.getElementById('stat-time-wed').innerText = sw.length > 0 ? Math.round(sw[sw.length - 1]).toLocaleString() : "--";
             document.getElementById('stat-time-fri').innerText = sf.length > 0 ? Math.round(sf[sf.length - 1]).toLocaleString() : "--";
 
-            // 計算當盤漲跌 & 漲跌幅
             function calcChg(arr) {
                 const vals = arr.filter(v => v !== null && v !== 0);
                 if (vals.length < 2) return null;
@@ -749,10 +716,9 @@
                 xAxis: { type: 'category', data: data.x, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 10, rotate: 30, fontFamily: 'Arial' }, axisLine: { lineStyle: { color: '#f1f5f9' } } },
                 yAxis: [ { type: 'value', name: '期指', position: 'left' }, { type: 'value', name: '總點', position: 'left' }, { type: 'value', name: '獲利%', position: 'right' }, { type: 'value', name: '時價', position: 'right' } ],
                 dataZoom: [ { type: 'slider', xAxisIndex: 0 }, { type: 'slider', yAxisIndex: 0 }, { type: 'slider', yAxisIndex: 1 }, { type: 'slider', yAxisIndex: 2 }, { type: 'slider', yAxisIndex: 3 }, { type: 'inside', xAxisIndex: 0 } ],
-                visualMap: PROFIT_VISUAL_MAP,
                 series: [
                     { type: 'line', data: [], markArea: { silent: true, data: markAreas }, silent: true },
-                    { name: '獲利率', type: 'line', yAxisIndex: 2, data: data.yProfit, smooth: true, showSymbol: false, lineStyle: { width: 0 }, areaStyle: {}, z: 1 },
+                    { name: '獲利率', type: 'line', yAxisIndex: 2, data: data.yProfit, smooth: true, showSymbol: false, lineStyle: { width: 0 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(225, 29, 72, 0.7)' }, { offset: 1, color: 'rgba(225, 29, 72, 0.05)' }]) }, z: 1 },
                     { name: '週三時價', type: 'line', yAxisIndex: 3, data: data.yTimeWed, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#ef4444', shadowBlur: 3 }, z: 4 },
                     { name: '週五時價', type: 'line', yAxisIndex: 3, data: data.yTimeFri, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#10b981', shadowBlur: 3 }, z: 4 },
                     { name: '期指', type: 'line', yAxisIndex: 0, data: data.yPrice, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#2563eb', shadowBlur: 3 }, z: 5 },
@@ -777,7 +743,6 @@
                 const fmtDate = `${date.getFullYear()}/${pad(date.getMonth()+1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
                 const commitUrl = `https://github.com/Joption-tw/demo-performance/commit/${data.sha}`;
 
-                // 標題區版本 badge：顯示「更新 04/15 14:30」
                 const badge = document.getElementById('version-badge');
                 const tag   = document.getElementById('version-tag');
                 const shortDate = `更新 ${pad(date.getMonth()+1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -787,7 +752,6 @@
                     badge.onclick = () => window.open(commitUrl, '_blank');
                 }
 
-                // 頁尾
                 const fc = document.getElementById('footer-commit');
                 const ft = document.getElementById('footer-deploy-time');
                 if (fc) fc.innerHTML = `<a href="${commitUrl}" target="_blank" class="hover:text-blue-500 transition-colors">#${sha}</a> · ${msgFull.substring(0, 30)}${msgFull.length > 30 ? '…' : ''}`;
@@ -801,9 +765,7 @@
             }
         }
 
-        // ── 訪客人數（三個網站共用同一計數器）──────────────────────
         async function fetchVisits() {
-            // GitHub Pages 用絕對網址呼叫 Vercel API；Vercel 用相對路徑
             const apiUrl = location.hostname.includes('github.io')
                 ? 'https://www.joption.org/api/visits'
                 : '/api/visits';
