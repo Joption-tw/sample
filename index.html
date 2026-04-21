@@ -741,9 +741,10 @@
                 xAxis: { type: 'category', data: data.x, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 10, rotate: 30, fontFamily: 'Arial' }, axisLine: { lineStyle: { color: '#f1f5f9' } } },
                 yAxis: [ { type: 'value', name: '期指', position: 'left' }, { type: 'value', name: '總點', position: 'left' }, { type: 'value', name: '獲利%', position: 'right' }, { type: 'value', name: '時價', position: 'right' } ],
                 dataZoom: [ { type: 'slider', xAxisIndex: 0 }, { type: 'slider', yAxisIndex: 0 }, { type: 'slider', yAxisIndex: 1 }, { type: 'slider', yAxisIndex: 2 }, { type: 'slider', yAxisIndex: 3 }, { type: 'inside', xAxisIndex: 0 } ],
+                visualMap: { show: false, type: 'piecewise', dimension: 1, seriesIndex: [1], pieces: [{ gte: 0, color: 'rgba(225, 29, 72, 0.55)' }, { lt: 0, color: 'rgba(134, 239, 172, 0.65)' }] },
                 series: [
                     { type: 'line', data: [], markArea: { silent: true, data: markAreas }, silent: true },
-                    { name: '獲利率', type: 'line', yAxisIndex: 2, data: data.yProfit, smooth: true, showSymbol: false, lineStyle: { width: 0 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(225, 29, 72, 0.7)' }, { offset: 1, color: 'rgba(225, 29, 72, 0.05)' }]) }, z: 1 },
+                    { name: '獲利率', type: 'line', yAxisIndex: 2, data: data.yProfit, smooth: true, showSymbol: false, lineStyle: { width: 0 }, areaStyle: {}, z: 1 },
                     { name: '週三時價', type: 'line', yAxisIndex: 3, data: data.yTimeWed, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#ef4444', shadowBlur: 3 }, z: 4 },
                     { name: '週五時價', type: 'line', yAxisIndex: 3, data: data.yTimeFri, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#10b981', shadowBlur: 3 }, z: 4 },
                     { name: '期指', type: 'line', yAxisIndex: 0, data: data.yPrice, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#2563eb', shadowBlur: 3 }, z: 5 },
