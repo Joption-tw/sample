@@ -259,7 +259,7 @@ function buildChartData() {
     };
   });
 
-  return { xLabels, series };
+  return { xLabels, series, rows };
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -272,7 +272,7 @@ function initChart() {
 
 function renderChart() {
   if (!chart || allRows.length === 0) return;
-  const { xLabels, series } = buildChartData();
+  const { xLabels, series, rows } = buildChartData();
   const hasData = series.some(s => s.data.some(v => v !== null));
 
   const option = {
@@ -398,7 +398,7 @@ function renderChart() {
   };
 
   chart.setOption(option, true);
-  updateShrinkBar(getActiveSeries(), series);
+  updateShrinkBar(getActiveSeries(), rows);
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -454,44 +454,75 @@ function setBan(key) {
 }
 
 /* ──────────────────────────────────────────────────────────
-   縮幅計算
+   降幅計算
 ────────────────────────────────────────────────────────── */
-function calcShrink(vals) {
-  const v = vals.filter(x => x !== null && x !== undefined);
-  if (v.length < 2) return null;
-  return v[0] - v[v.length - 1];   // 開盤 − 收盤（正值＝縮水）
+function timeToMins(timeStr) {
+  const m = String(timeStr || '').match(/(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return parseInt(m[1]) * 60 + parseInt(m[2]);
 }
 
-function updateShrinkBar(seriesList, builtSeries) {
+function windowAvg(rows, colIdx, fromMins, toMins) {
+  const vals = rows
+    .filter(r => { const t = timeToMins(r[COL.time]); return t !== null && t >= fromMins && t <= toMins; })
+    .map(r => toNum(r[colIdx]))
+    .filter(v => v !== null);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+function calcDecline(rows, colIdx) {
+  const isEarly = currentBan.includes('早');
+  const isLate  = currentBan.includes('晚');
+
+  let startVal;
+  if (isEarly) {
+    startVal = windowAvg(rows, colIdx, 8*60+45, 8*60+50);   // 08:45~08:50
+  } else if (isLate) {
+    startVal = windowAvg(rows, colIdx, 15*60, 15*60+5);     // 15:00~15:05
+  } else {
+    const v = rows.map(r => toNum(r[colIdx])).filter(v => v !== null);
+    startVal = v.length ? v[0] : null;
+  }
+
+  const allVals = rows.map(r => toNum(r[colIdx])).filter(v => v !== null);
+  const endVal  = allVals.length ? allVals[allVals.length - 1] : null;
+
+  if (startVal === null || endVal === null || startVal === 0) return null;
+  return { start: startVal, end: endVal, rate: (startVal - endVal) / startVal * 100 };
+}
+
+function updateShrinkBar(seriesList, rows) {
   const bar = document.getElementById('shrink-bar');
   bar.innerHTML = '';
 
-  seriesList.forEach((def, i) => {
-    const shrink = calcShrink(builtSeries[i].data);
-    if (shrink === null) return;
+  seriesList.forEach(def => {
+    const colIdx = COL[def.key];
+    const result = calcDecline(rows, colIdx);
+    if (result === null) return;
 
-    const isWed   = def.key.startsWith('wed');
-    const baseClr = isWed ? '#ef4444' : '#16a34a';
-    const bgClr   = isWed ? 'rgba(239,68,68,.1)' : 'rgba(22,163,74,.1)';
-    const bdrClr  = isWed ? 'rgba(239,68,68,.3)' : 'rgba(22,163,74,.3)';
+    const { start, end, rate } = result;
+    const isWed  = def.key.startsWith('wed');
+    const bgClr  = isWed ? 'rgba(239,68,68,.1)' : 'rgba(22,163,74,.1)';
+    const bdrClr = isWed ? 'rgba(239,68,68,.3)' : 'rgba(22,163,74,.3)';
 
-    // 縮幅正值＝時間價值縮水（正常），負值＝膨脹
-    const sign    = shrink >= 0 ? '▼' : '▲';
-    const valClr  = shrink >= 0 ? baseClr : '#facc15';
-    const abs     = Math.abs(shrink).toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+    const sign   = rate >= 0 ? '▼' : '▲';
+    const valClr = rate >= 0 ? def.color : '#facc15';
+    const pct    = Math.abs(rate).toFixed(2);
 
     const card = document.createElement('div');
     card.style.cssText = `
       display:inline-flex;flex-direction:column;align-items:center;
-      padding:6px 14px;border-radius:8px;min-width:100px;
+      padding:6px 14px;border-radius:8px;min-width:110px;
       background:${bgClr};border:1px solid ${bdrClr};
     `;
     card.innerHTML = `
       <span style="font-size:10px;color:#94a3b8;margin-bottom:2px;white-space:nowrap">${def.label}</span>
-      <span style="font-size:16px;font-weight:700;color:${valClr};font-variant-numeric:tabular-nums">
-        ${sign} ${abs}
+      <span style="font-size:18px;font-weight:700;color:${valClr};font-variant-numeric:tabular-nums">
+        ${sign} ${pct}%
       </span>
-      <span style="font-size:10px;color:#64748b">點</span>
+      <span style="font-size:10px;color:#64748b">
+        ${Math.round(start).toLocaleString()} → ${Math.round(end).toLocaleString()}
+      </span>
     `;
     bar.appendChild(card);
   });
