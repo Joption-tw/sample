@@ -47,7 +47,9 @@
     </div>
     <div class="flex items-center gap-3 mt-1">
       <span id="status" class="text-xs text-gray-400">--</span>
-      <button onclick="loadData()"
+      <span id="last-update" class="text-xs text-gray-600"></span>
+      <span id="countdown" class="text-xs text-gray-600"></span>
+      <button onclick="manualRefresh()"
         class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm text-white transition">
         ↻ 重新整理
       </button>
@@ -524,6 +526,7 @@ async function loadData() {
 
     buildBanButtons();
     setStatus(`已載入 ${allRows.length} 筆資料`);
+    setLastUpdate();
     renderChart();
   } catch (e) {
     setStatus(`載入失敗：${e.message}`, false);
@@ -534,10 +537,52 @@ async function loadData() {
 }
 
 /* ──────────────────────────────────────────────────────────
+   自動更新（每 2 分鐘）
+────────────────────────────────────────────────────────── */
+const AUTO_INTERVAL = 120;   // 秒
+let countdownSec = AUTO_INTERVAL;
+let countdownTimer = null;
+
+function updateCountdown() {
+  const el = document.getElementById('countdown');
+  if (!el) return;
+  const m = Math.floor(countdownSec / 60);
+  const s = String(countdownSec % 60).padStart(2, '0');
+  el.textContent = `${m}:${s} 後更新`;
+  countdownSec--;
+  if (countdownSec < 0) {
+    countdownSec = AUTO_INTERVAL;
+    loadData();
+  }
+}
+
+function startAutoRefresh() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownSec = AUTO_INTERVAL;
+  countdownTimer = setInterval(updateCountdown, 1000);
+}
+
+function manualRefresh() {
+  countdownSec = AUTO_INTERVAL;
+  loadData();
+}
+
+function setLastUpdate() {
+  const el = document.getElementById('last-update');
+  if (!el) return;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  el.textContent = `更新於 ${hh}:${mm}:${ss}`;
+}
+
+/* ──────────────────────────────────────────────────────────
    啟動
 ────────────────────────────────────────────────────────── */
 initChart();
 loadData();
+startAutoRefresh();
 </script>
 </body>
 </html>
