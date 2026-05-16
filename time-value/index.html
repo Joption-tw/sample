@@ -56,18 +56,18 @@
 
   <!-- ── Filters ─────────────────────────────────────────── -->
   <div class="space-y-2 mb-4">
-    <!-- Session -->
+    <!-- Series: 週三/週五 -->
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-xs text-gray-500 w-16 shrink-0">盤　別</span>
+      <span class="text-xs text-gray-500 w-16 shrink-0">資料序列</span>
       <button id="s-all" onclick="setSession('all')" class="chip active">全部</button>
       <button id="s-wed" onclick="setSession('wed')" class="chip">週三盤</button>
       <button id="s-fri" onclick="setSession('fri')" class="chip">週五盤</button>
     </div>
-    <!-- Remaining days (dynamically populated) -->
+    <!-- 10-盤 selector (dynamically populated) -->
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-xs text-gray-500 w-16 shrink-0">剩餘天數</span>
-      <div id="days-wrap" class="flex flex-wrap gap-1.5">
-        <button onclick="setDay('all')" id="d-all" class="chip active">全部</button>
+      <span class="text-xs text-gray-500 w-16 shrink-0">選　盤</span>
+      <div id="ban-wrap" class="flex flex-wrap gap-1.5">
+        <button onclick="setBan('all')" id="ban-all" class="chip active">全部</button>
       </div>
     </div>
   </div>
@@ -144,9 +144,9 @@ const FRI_SERIES = [
 /* ──────────────────────────────────────────────────────────
    狀態
 ────────────────────────────────────────────────────────── */
-let allRows     = [];   // 所有原始列 (陣列)
+let allRows     = [];
 let currentSess = 'all';
-let currentDay  = 'all';
+let currentBan  = 'all';   // 'all' | '五-早' | '五-晚' | '四-早' ...
 let chart       = null;
 
 /* ──────────────────────────────────────────────────────────
@@ -208,10 +208,22 @@ function getActiveSeries() {
   return [...WED_SERIES, ...FRI_SERIES];
 }
 
+function isEarlySession(timeStr) {
+  const m = String(timeStr || '').trim().match(/^(\d{1,2}):/);
+  if (!m) return true;
+  const h = parseInt(m[1]);
+  return h >= 6 && h < 14;   // 06:00–13:59 早盤，其餘晚盤
+}
+
 function buildChartData() {
   let rows = allRows;
-  if (currentDay !== 'all') {
-    rows = rows.filter(r => String(r[COL.days]).trim() === currentDay);
+  if (currentBan !== 'all') {
+    const [day, sess] = currentBan.split('-');
+    const wantEarly = sess === '早';
+    rows = rows.filter(r =>
+      String(r[COL.days]).trim() === day &&
+      isEarlySession(r[COL.time]) === wantEarly
+    );
   }
 
   const xLabels = rows.map(r => {
@@ -382,29 +394,31 @@ function renderChart() {
 }
 
 /* ──────────────────────────────────────────────────────────
-   剩餘天數按鈕（動態）
+   10-盤按鈕（動態）
 ────────────────────────────────────────────────────────── */
-function buildDayButtons() {
-  const daySet = new Set(allRows.map(r => String(r[COL.days] || '').trim()).filter(Boolean));
-  const ORDER = ['五','四','三','二','一','零'];
-  const days   = [...daySet].sort((a, b) => {
-    const ia = ORDER.findIndex(k => a.includes(k));
-    const ib = ORDER.findIndex(k => b.includes(k));
-    const ra = ia === -1 ? 999 : ia;
-    const rb = ib === -1 ? 999 : ib;
-    if (ra !== rb) return ra - rb;
-    return a.localeCompare(b, 'zh-TW');
-  });
+function buildBanButtons() {
+  const DAY_ORDER = ['五','四','三','二','一','零'];
+  const existing = new Set(
+    allRows.map(r => String(r[COL.days] || '').trim()).filter(Boolean)
+  );
 
-  const wrap = document.getElementById('days-wrap');
-  wrap.innerHTML = '<button onclick="setDay(\'all\')" id="d-all" class="chip active">全部</button>';
-  days.forEach(d => {
-    const btn = document.createElement('button');
-    btn.className = 'chip';
-    btn.id = `d-${d}`;
-    btn.textContent = `${d} 天`;
-    btn.onclick = () => setDay(d);
-    wrap.appendChild(btn);
+  const wrap = document.getElementById('ban-wrap');
+  wrap.innerHTML = '<button onclick="setBan(\'all\')" id="ban-all" class="chip active">全部</button>';
+
+  DAY_ORDER.forEach(d => {
+    if (!existing.has(d)) return;
+    const hasEarly = allRows.some(r => String(r[COL.days]).trim() === d && isEarlySession(r[COL.time]));
+    const hasLate  = allRows.some(r => String(r[COL.days]).trim() === d && !isEarlySession(r[COL.time]));
+    [hasEarly && '早', hasLate && '晚'].forEach(sess => {
+      if (!sess) return;
+      const key = `${d}-${sess}`;
+      const btn = document.createElement('button');
+      btn.className = 'chip';
+      btn.id = `ban-${key}`;
+      btn.textContent = `${d}天${sess}盤`;
+      btn.onclick = () => setBan(key);
+      wrap.appendChild(btn);
+    });
   });
 }
 
@@ -419,10 +433,10 @@ function setSession(sess) {
   renderChart();
 }
 
-function setDay(day) {
-  currentDay = day;
-  document.querySelectorAll('.chip[id^="d-"]').forEach(el => {
-    el.classList.toggle('active', el.id === `d-${day}`);
+function setBan(key) {
+  currentBan = key;
+  document.querySelectorAll('.chip[id^="ban-"]').forEach(el => {
+    el.classList.toggle('active', el.id === `ban-${key}`);
   });
   renderChart();
 }
@@ -455,7 +469,7 @@ async function loadData() {
       .map(l => parseCSVLine(l))
       .filter(r => r.length >= 3 && r[COL.days] && r[COL.time]);
 
-    buildDayButtons();
+    buildBanButtons();
     setStatus(`已載入 ${allRows.length} 筆資料`);
     renderChart();
   } catch (e) {
