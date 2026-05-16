@@ -70,6 +70,22 @@
         <button onclick="setDay('all')" id="d-all" class="chip active">全部</button>
       </div>
     </div>
+    <!-- Y-axis range -->
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-xs text-gray-500 w-16 shrink-0">Y 軸範圍</span>
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-gray-500">最小</label>
+        <input id="y-min" type="number" placeholder="自動"
+          class="w-24 px-2 py-1 rounded bg-gray-800 border border-gray-700 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+          onchange="applyYAxis()" />
+        <label class="text-xs text-gray-500">最大</label>
+        <input id="y-max" type="number" placeholder="自動"
+          class="w-24 px-2 py-1 rounded bg-gray-800 border border-gray-700 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+          onchange="applyYAxis()" />
+        <button onclick="resetYAxis()"
+          class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-300 transition">自動</button>
+      </div>
+    </div>
   </div>
 
   <!-- ── Chart ───────────────────────────────────────────── -->
@@ -148,6 +164,8 @@ let allRows     = [];   // 所有原始列 (陣列)
 let currentSess = 'all';
 let currentDay  = 'all';
 let chart       = null;
+let yMin        = null;
+let yMax        = null;
 
 /* ──────────────────────────────────────────────────────────
    CSV 解析
@@ -310,6 +328,8 @@ function renderChart() {
     yAxis: {
       type: 'value',
       position: 'left',
+      min: yMin !== null ? yMin : undefined,
+      max: yMax !== null ? yMax : undefined,
       axisLabel: {
         color: '#475569',
         fontSize: 11,
@@ -390,6 +410,25 @@ function setDay(day) {
   document.querySelectorAll('.chip[id^="d-"]').forEach(el => {
     el.classList.toggle('active', el.id === `d-${day}`);
   });
+  renderChart();
+}
+
+/* ──────────────────────────────────────────────────────────
+   Y 軸控制
+────────────────────────────────────────────────────────── */
+function applyYAxis() {
+  const minVal = parseFloat(document.getElementById('y-min').value);
+  const maxVal = parseFloat(document.getElementById('y-max').value);
+  yMin = isNaN(minVal) ? null : minVal;
+  yMax = isNaN(maxVal) ? null : maxVal;
+  renderChart();
+}
+
+function resetYAxis() {
+  yMin = null;
+  yMax = null;
+  document.getElementById('y-min').value = '';
+  document.getElementById('y-max').value = '';
   renderChart();
 }
 
