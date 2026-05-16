@@ -386,10 +386,14 @@ function renderChart() {
 ────────────────────────────────────────────────────────── */
 function buildDayButtons() {
   const daySet = new Set(allRows.map(r => String(r[COL.days] || '').trim()).filter(Boolean));
+  const ORDER = ['五','四','三','二','一','零'];
   const days   = [...daySet].sort((a, b) => {
-    // 嘗試數字排序；若含中文字則字典排序
-    const na = parseFloat(a), nb = parseFloat(b);
-    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.localeCompare(b, 'zh-TW');
+    const ia = ORDER.findIndex(k => a.includes(k));
+    const ib = ORDER.findIndex(k => b.includes(k));
+    const ra = ia === -1 ? 999 : ia;
+    const rb = ib === -1 ? 999 : ib;
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b, 'zh-TW');
   });
 
   const wrap = document.getElementById('days-wrap');
