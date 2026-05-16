@@ -397,28 +397,32 @@ function renderChart() {
    10-盤按鈕（動態）
 ────────────────────────────────────────────────────────── */
 function buildBanButtons() {
-  const DAY_ORDER = ['五','四','三','二','一','零'];
-  const existing = new Set(
-    allRows.map(r => String(r[COL.days] || '').trim()).filter(Boolean)
-  );
+  const ORDER = [
+    { day: '五', sess: '晚' },
+    { day: '四', sess: '早' }, { day: '四', sess: '晚' },
+    { day: '三', sess: '早' }, { day: '三', sess: '晚' },
+    { day: '二', sess: '早' }, { day: '二', sess: '晚' },
+    { day: '一', sess: '早' }, { day: '一', sess: '晚' },
+    { day: '零', sess: '早' },
+  ];
 
   const wrap = document.getElementById('ban-wrap');
   wrap.innerHTML = '<button onclick="setBan(\'all\')" id="ban-all" class="chip active">全部</button>';
 
-  DAY_ORDER.forEach(d => {
-    if (!existing.has(d)) return;
-    const hasEarly = allRows.some(r => String(r[COL.days]).trim() === d && isEarlySession(r[COL.time]));
-    const hasLate  = allRows.some(r => String(r[COL.days]).trim() === d && !isEarlySession(r[COL.time]));
-    [hasEarly && '早', hasLate && '晚'].forEach(sess => {
-      if (!sess) return;
-      const key = `${d}-${sess}`;
-      const btn = document.createElement('button');
-      btn.className = 'chip';
-      btn.id = `ban-${key}`;
-      btn.textContent = `${d}天${sess}盤`;
-      btn.onclick = () => setBan(key);
-      wrap.appendChild(btn);
-    });
+  ORDER.forEach(({ day, sess }) => {
+    const wantEarly = sess === '早';
+    const hasData = allRows.some(r =>
+      String(r[COL.days]).trim() === day &&
+      isEarlySession(r[COL.time]) === wantEarly
+    );
+    if (!hasData) return;
+    const key = `${day}-${sess}`;
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.id = `ban-${key}`;
+    btn.textContent = `${day}天${sess}盤`;
+    btn.onclick = () => setBan(key);
+    wrap.appendChild(btn);
   });
 }
 
