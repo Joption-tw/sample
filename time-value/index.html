@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>歷史時間價值比對</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif; }
+    .btn-active  { background-color: #2563eb !important; color: #fff !important; }
+    .btn-active:hover { background-color: #1d4ed8 !important; }
+    .chip {
+      display: inline-flex; align-items: center;
+      padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500;
+      background: #1e293b; color: #94a3b8; cursor: pointer; transition: all .15s;
+      border: 1px solid #334155; user-select: none;
+    }
+    .chip:hover  { background: #293548; color: #e2e8f0; }
+    .chip.active { background: #1e40af; color: #dbeafe; border-color: #3b82f6; }
+    #chart-wrap { position: relative; }
+    #loading-overlay {
+      position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; background: rgba(3,7,18,.7); z-index: 10;
+      border-radius: 12px;
+    }
+    .spinner {
+      width: 36px; height: 36px; border: 3px solid #334155;
+      border-top-color: #3b82f6; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .legend-line { display: inline-block; height: 2px; width: 22px; vertical-align: middle; margin-right: 4px; }
+    .legend-dashed { background: none !important; border-top-width: 2px; border-top-style: dashed; }
+    .legend-dotted { background: none !important; border-top-width: 2px; border-top-style: dotted; }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+<div class="max-w-screen-xl mx-auto px-4 py-5">
+
+  <!-- ── Header ─────────────────────────────────────────── -->
+  <div class="flex flex-wrap items-start justify-between gap-4 mb-5">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">歷史時間價值比對</h1>
+      <p class="text-gray-400 text-sm mt-0.5">週三／週五 即時與歷史時間價值疊圖分析</p>
+    </div>
+    <div class="flex items-center gap-3 mt-1">
+      <span id="status" class="text-xs text-gray-400">--</span>
+      <button onclick="loadData()"
+        class="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm text-white transition">
+        ↻ 重新整理
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Filters ─────────────────────────────────────────── -->
+  <div class="space-y-2 mb-4">
+    <!-- Session -->
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-xs text-gray-500 w-16 shrink-0">盤　別</span>
+      <button id="s-all" onclick="setSession('all')" class="chip active">全部</button>
+      <button id="s-wed" onclick="setSession('wed')" class="chip">週三盤</button>
+      <button id="s-fri" onclick="setSession('fri')" class="chip">週五盤</button>
+    </div>
+    <!-- Remaining days (dynamically populated) -->
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-xs text-gray-500 w-16 shrink-0">剩餘天數</span>
+      <div id="days-wrap" class="flex flex-wrap gap-1.5">
+        <button onclick="setDay('all')" id="d-all" class="chip active">全部</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chart ───────────────────────────────────────────── -->
+  <div id="chart-wrap" class="rounded-xl border border-gray-700/60 overflow-hidden bg-gray-900">
+    <div id="loading-overlay"><div class="spinner"></div></div>
+    <div id="chart" style="height:580px;width:100%;"></div>
+  </div>
+
+  <!-- ── Legend ──────────────────────────────────────────── -->
+  <div class="mt-4 flex flex-wrap gap-x-5 gap-y-2">
+    <span class="text-xs text-gray-500 self-center">圖例：</span>
+    <!-- Wed -->
+    <span class="text-xs text-gray-300 flex items-center">
+      <span class="legend-line" style="background:#ef4444;"></span>週三TX3（即時）
+    </span>
+    <span class="text-xs text-gray-300 flex items-center">
+      <span class="legend-line legend-dashed" style="border-color:#f97316;"></span>週三TX2（前期）
+    </span>
+    <span class="text-xs text-gray-300 flex items-center">
+      <span class="legend-line legend-dotted" style="border-color:#fbbf24;"></span>週三TX1（更前期）
+    </span>
+    <!-- Fri -->
+    <span class="text-xs text-gray-300 flex items-center">
+      <span class="legend-line" style="background:#10b981;"></span>週五TXY（即時）
+    </span>
+    <span class="text-xs text-gray-300 flex items-center">
+      <span class="legend-line legend-dashed" style="border-color:#06b6d4;"></span>週五TXX（前期）
+    </span>
+    <span class="text-xs text-gray-300 flex items-center">
+      <span class="legend-line legend-dotted" style="border-color:#6366f1;"></span>週五TXV（更前期）
+    </span>
+    <span class="text-xs text-gray-500 self-center ml-2">｜實線=即時 虛線=前期 點線=更前期</span>
+  </div>
+
+  <p class="text-[11px] text-gray-600 mt-3 text-right">
+    資料來源：Google Sheets · 異常值已自動修正 · 可滾輪縮放／拖曳平移
+  </p>
+</div>
+
+<script>
+/* ──────────────────────────────────────────────────────────
+   常數
+────────────────────────────────────────────────────────── */
+const SHEET_ID = '1AsY4_MJipaMp_cNLpyeXTpFGnG0FD4vWJu-SDRdvtME';
+const GID      = '710415505';
+const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
+
+// 欄位索引 (0-based)
+const COL = {
+  days: 0,   // A 剩餘天數
+  time: 1,   // B 時間
+  wedC: 2,   // C 週三TX3（即時）
+  // D skip
+  friE: 4,   // E 週五TXY（即時）
+  wedF: 5,   // F 週三TX2（前期）
+  wedG: 6,   // G 週三TX1（更前期）
+  friH: 7,   // H 週五TXX（前期）
+  friI: 8,   // I 週五TXV（更前期）
+};
+
+const WED_SERIES = [
+  { key: 'wedC', label: '週三TX3（即時）', color: '#ef4444', lineType: 'solid',  width: 2.5 },
+  { key: 'wedF', label: '週三TX2（前期）', color: '#f97316', lineType: 'dashed', width: 1.5 },
+  { key: 'wedG', label: '週三TX1（更前期）',color: '#fbbf24', lineType: 'dotted', width: 1.5 },
+];
+const FRI_SERIES = [
+  { key: 'friE', label: '週五TXY（即時）', color: '#10b981', lineType: 'solid',  width: 2.5 },
+  { key: 'friH', label: '週五TXX（前期）', color: '#06b6d4', lineType: 'dashed', width: 1.5 },
+  { key: 'friI', label: '週五TXV（更前期）',color: '#6366f1', lineType: 'dotted', width: 1.5 },
+];
+
+/* ──────────────────────────────────────────────────────────
+   狀態
+────────────────────────────────────────────────────────── */
+let allRows     = [];   // 所有原始列 (陣列)
+let currentSess = 'all';
+let currentDay  = 'all';
+let chart       = null;
+
+/* ──────────────────────────────────────────────────────────
+   CSV 解析
+────────────────────────────────────────────────────────── */
+function parseCSVLine(line) {
+  const res = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { res.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  res.push(cur.trim());
+  return res;
+}
+
+function toNum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(/,/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+/* ──────────────────────────────────────────────────────────
+   異常值修正
+   演算法：對每個非 null 點，若左右鄰居皆存在且
+   該點偏離鄰居平均的幅度超過門檻（1.5%），則
+   以鄰居平均替代；再做一次 3-point 平滑。
+────────────────────────────────────────────────────────── */
+function fixOutliers(arr, maxPct = 0.015) {
+  const a = [...arr];
+  for (let i = 1; i < a.length - 1; i++) {
+    if (a[i] === null) continue;
+    const prev = a[i - 1], next = a[i + 1];
+    if (prev === null || next === null) continue;
+    const avg = (prev + next) / 2;
+    const thr = Math.max(150, Math.abs(avg) * maxPct);
+    if (Math.abs(a[i] - avg) > thr) {
+      a[i] = +(avg.toFixed(0));
+    }
+  }
+  // 3-point smoothing (very light)
+  const s = [...a];
+  for (let i = 1; i < s.length - 1; i++) {
+    if (a[i - 1] !== null && a[i] !== null && a[i + 1] !== null) {
+      s[i] = +((a[i - 1] + a[i] * 2 + a[i + 1]) / 4).toFixed(1);
+    }
+  }
+  return s;
+}
+
+/* ──────────────────────────────────────────────────────────
+   篩選 & 建構圖表資料
+────────────────────────────────────────────────────────── */
+function getActiveSeries() {
+  if (currentSess === 'wed') return WED_SERIES;
+  if (currentSess === 'fri') return FRI_SERIES;
+  return [...WED_SERIES, ...FRI_SERIES];
+}
+
+function buildChartData() {
+  let rows = allRows;
+  if (currentDay !== 'all') {
+    rows = rows.filter(r => String(r[COL.days]).trim() === currentDay);
+  }
+
+  const xLabels = rows.map(r => {
+    const d = String(r[COL.days] || '').trim();
+    const t = String(r[COL.time] || '').trim();
+    return `${d}天 ${t}`;
+  });
+
+  const series = getActiveSeries().map(def => {
+    const colIdx = COL[def.key];
+    const rawVals = rows.map(r => toNum(r[colIdx]));
+    const cleaned = fixOutliers(rawVals);
+    return {
+      name: def.label,
+      type: 'line',
+      data: cleaned,
+      symbol: 'none',
+      connectNulls: false,
+      lineStyle: {
+        color: def.color,
+        width: def.width,
+        type: def.lineType === 'dotted' ? [3, 4] : def.lineType,
+      },
+      itemStyle: { color: def.color },
+      emphasis: { scale: false },
+    };
+  });
+
+  return { xLabels, series };
+}
+
+/* ──────────────────────────────────────────────────────────
+   ECharts 初始化
+────────────────────────────────────────────────────────── */
+function initChart() {
+  chart = echarts.init(document.getElementById('chart'), null, { renderer: 'canvas' });
+  window.addEventListener('resize', () => chart.resize());
+}
+
+function renderChart() {
+  if (!chart || allRows.length === 0) return;
+  const { xLabels, series } = buildChartData();
+  const hasData = series.some(s => s.data.some(v => v !== null));
+
+  const option = {
+    backgroundColor: '#0f172a',
+    animation: false,
+
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: '#1e293b',
+      borderColor: '#334155',
+      padding: [8, 12],
+      textStyle: { color: '#e2e8f0', fontSize: 12, fontFamily: 'inherit' },
+      extraCssText: 'box-shadow:0 4px 16px rgba(0,0,0,.5);border-radius:8px;',
+      formatter(params) {
+        if (!params.length) return '';
+        let html = `<div style="font-weight:600;margin-bottom:6px;color:#94a3b8;font-size:11px">${params[0].name}</div>`;
+        params.forEach(p => {
+          if (p.value === null || p.value === undefined) return;
+          html += `
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+              <span style="display:inline-block;width:10px;height:3px;background:${p.color};border-radius:2px;"></span>
+              <span style="color:#94a3b8;font-size:11px;min-width:140px">${p.seriesName}</span>
+              <span style="font-weight:600;color:#f1f5f9;font-variant-numeric:tabular-nums">${Number(p.value).toLocaleString()}</span>
+            </div>`;
+        });
+        return html;
+      }
+    },
+
+    legend: {
+      show: false,  // 使用自訂圖例
+    },
+
+    grid: {
+      left: 70, right: 20, top: 24, bottom: 80,
+      containLabel: false,
+    },
+
+    xAxis: {
+      type: 'category',
+      data: xLabels,
+      boundaryGap: false,
+      axisLabel: {
+        color: '#475569',
+        fontSize: 10,
+        rotate: 30,
+        interval: Math.max(0, Math.floor(xLabels.length / 40)),
+      },
+      axisLine:  { lineStyle: { color: '#1e293b' } },
+      axisTick:  { lineStyle: { color: '#1e293b' } },
+      splitLine: { show: false },
+    },
+
+    yAxis: {
+      type: 'value',
+      position: 'left',
+      axisLabel: {
+        color: '#475569',
+        fontSize: 11,
+        formatter: v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v,
+      },
+      splitLine: { lineStyle: { color: '#1e293b', type: 'dashed' } },
+      axisLine:  { show: false },
+      axisTick:  { show: false },
+    },
+
+    dataZoom: [
+      {
+        type: 'inside',
+        start: 0, end: 100,
+        zoomOnMouseWheel: true,
+        moveOnMouseMove: true,
+      },
+      {
+        type: 'slider',
+        height: 22,
+        bottom: 16,
+        borderColor: '#1e293b',
+        backgroundColor: '#0f172a',
+        fillerColor: 'rgba(37,99,235,.25)',
+        handleStyle: { color: '#3b82f6', borderColor: '#3b82f6' },
+        moveHandleStyle: { color: '#3b82f6' },
+        emphasis: { handleStyle: { color: '#60a5fa' } },
+        textStyle: { color: '#475569', fontSize: 10 },
+        dataBackground: {
+          lineStyle: { color: '#334155' },
+          areaStyle: { color: '#1e293b' },
+        },
+      },
+    ],
+
+    series: hasData ? series : [],
+  };
+
+  chart.setOption(option, true);
+}
+
+/* ──────────────────────────────────────────────────────────
+   剩餘天數按鈕（動態）
+────────────────────────────────────────────────────────── */
+function buildDayButtons() {
+  const daySet = new Set(allRows.map(r => String(r[COL.days] || '').trim()).filter(Boolean));
+  const days   = [...daySet].sort((a, b) => {
+    // 嘗試數字排序；若含中文字則字典排序
+    const na = parseFloat(a), nb = parseFloat(b);
+    return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.localeCompare(b, 'zh-TW');
+  });
+
+  const wrap = document.getElementById('days-wrap');
+  wrap.innerHTML = '<button onclick="setDay(\'all\')" id="d-all" class="chip active">全部</button>';
+  days.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.id = `d-${d}`;
+    btn.textContent = `${d} 天`;
+    btn.onclick = () => setDay(d);
+    wrap.appendChild(btn);
+  });
+}
+
+/* ──────────────────────────────────────────────────────────
+   互動控制
+────────────────────────────────────────────────────────── */
+function setSession(sess) {
+  currentSess = sess;
+  ['all', 'wed', 'fri'].forEach(s => {
+    document.getElementById(`s-${s}`)?.classList.toggle('active', s === sess);
+  });
+  renderChart();
+}
+
+function setDay(day) {
+  currentDay = day;
+  document.querySelectorAll('.chip[id^="d-"]').forEach(el => {
+    el.classList.toggle('active', el.id === `d-${day}`);
+  });
+  renderChart();
+}
+
+/* ──────────────────────────────────────────────────────────
+   資料載入
+────────────────────────────────────────────────────────── */
+function setStatus(msg, ok = true) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.style.color = ok ? '#64748b' : '#f87171';
+}
+
+function showLoading(v) {
+  document.getElementById('loading-overlay').style.display = v ? 'flex' : 'none';
+}
+
+async function loadData() {
+  showLoading(true);
+  setStatus('資料載入中…');
+  try {
+    const res = await fetch(CSV_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const lines = text.trim().split(/\r?\n/);
+
+    // 第一行通常是標題列，直接跳過
+    const dataLines = lines.slice(1);
+    allRows = dataLines
+      .map(l => parseCSVLine(l))
+      .filter(r => r.length >= 3 && r[COL.days] && r[COL.time]);
+
+    buildDayButtons();
+    setStatus(`已載入 ${allRows.length} 筆資料`);
+    renderChart();
+  } catch (e) {
+    setStatus(`載入失敗：${e.message}`, false);
+    console.error(e);
+  } finally {
+    showLoading(false);
+  }
+}
+
+/* ──────────────────────────────────────────────────────────
+   啟動
+────────────────────────────────────────────────────────── */
+initChart();
+loadData();
+</script>
+</body>
+</html>
