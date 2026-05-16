@@ -72,6 +72,9 @@
     </div>
   </div>
 
+  <!-- ── 縮幅統計 ───────────────────────────────────────────── -->
+  <div id="shrink-bar" class="flex flex-wrap gap-2 mb-3"></div>
+
   <!-- ── Chart ───────────────────────────────────────────── -->
   <div id="chart-wrap" class="rounded-xl border border-gray-700/60 overflow-hidden bg-gray-900">
     <div id="loading-overlay"><div class="spinner"></div></div>
@@ -392,6 +395,7 @@ function renderChart() {
   };
 
   chart.setOption(option, true);
+  updateShrinkBar(getActiveSeries(), series);
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -444,6 +448,50 @@ function setBan(key) {
     el.classList.toggle('active', el.id === `ban-${key}`);
   });
   renderChart();
+}
+
+/* ──────────────────────────────────────────────────────────
+   縮幅計算
+────────────────────────────────────────────────────────── */
+function calcShrink(vals) {
+  const v = vals.filter(x => x !== null && x !== undefined);
+  if (v.length < 2) return null;
+  return v[0] - v[v.length - 1];   // 開盤 − 收盤（正值＝縮水）
+}
+
+function updateShrinkBar(seriesList, builtSeries) {
+  const bar = document.getElementById('shrink-bar');
+  bar.innerHTML = '';
+
+  seriesList.forEach((def, i) => {
+    const shrink = calcShrink(builtSeries[i].data);
+    if (shrink === null) return;
+
+    const isWed   = def.key.startsWith('wed');
+    const baseClr = isWed ? '#ef4444' : '#16a34a';
+    const bgClr   = isWed ? 'rgba(239,68,68,.1)' : 'rgba(22,163,74,.1)';
+    const bdrClr  = isWed ? 'rgba(239,68,68,.3)' : 'rgba(22,163,74,.3)';
+
+    // 縮幅正值＝時間價值縮水（正常），負值＝膨脹
+    const sign    = shrink >= 0 ? '▼' : '▲';
+    const valClr  = shrink >= 0 ? baseClr : '#facc15';
+    const abs     = Math.abs(shrink).toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+
+    const card = document.createElement('div');
+    card.style.cssText = `
+      display:inline-flex;flex-direction:column;align-items:center;
+      padding:6px 14px;border-radius:8px;min-width:100px;
+      background:${bgClr};border:1px solid ${bdrClr};
+    `;
+    card.innerHTML = `
+      <span style="font-size:10px;color:#94a3b8;margin-bottom:2px;white-space:nowrap">${def.label}</span>
+      <span style="font-size:16px;font-weight:700;color:${valClr};font-variant-numeric:tabular-nums">
+        ${sign} ${abs}
+      </span>
+      <span style="font-size:10px;color:#64748b">點</span>
+    `;
+    bar.appendChild(card);
+  });
 }
 
 /* ──────────────────────────────────────────────────────────
