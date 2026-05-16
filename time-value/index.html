@@ -130,15 +130,16 @@ const COL = {
   friI: 8,   // I 週五TXV（更前期）
 };
 
+// lineType: 'solid' | [dash, gap] 陣列
 const WED_SERIES = [
-  { key: 'wedC', label: '週三TX3（即時）', color: '#ef4444', lineType: 'solid',  width: 2.5 },
-  { key: 'wedF', label: '週三TX2（前期）', color: '#f87171', lineType: 'dashed', width: 1.5 },
-  { key: 'wedG', label: '週三TX1（更前期）',color: '#fca5a5', lineType: 'dotted', width: 1.5 },
+  { key: 'wedC', label: '週三TX3（即時）', color: '#ef4444', lineType: 'solid',   width: 3   },
+  { key: 'wedF', label: '週三TX2（前期）', color: '#f87171', lineType: [12, 4],   width: 2   },
+  { key: 'wedG', label: '週三TX1（更前期）',color: '#fca5a5', lineType: [2, 7],    width: 1.5 },
 ];
 const FRI_SERIES = [
-  { key: 'friE', label: '週五TXY（即時）', color: '#16a34a', lineType: 'solid',  width: 2.5 },
-  { key: 'friH', label: '週五TXX（前期）', color: '#4ade80', lineType: 'dashed', width: 1.5 },
-  { key: 'friI', label: '週五TXV（更前期）',color: '#86efac', lineType: 'dotted', width: 1.5 },
+  { key: 'friE', label: '週五TXY（即時）', color: '#16a34a', lineType: 'solid',   width: 3   },
+  { key: 'friH', label: '週五TXX（前期）', color: '#4ade80', lineType: [12, 4],   width: 2   },
+  { key: 'friI', label: '週五TXV（更前期）',color: '#86efac', lineType: [2, 7],    width: 1.5 },
 ];
 
 /* ──────────────────────────────────────────────────────────
@@ -245,7 +246,7 @@ function buildChartData() {
       lineStyle: {
         color: def.color,
         width: def.width,
-        type: def.lineType === 'dotted' ? [3, 4] : def.lineType,
+        type: def.lineType,
       },
       itemStyle: { color: def.color },
       emphasis: { scale: false },
