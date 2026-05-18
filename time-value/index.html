@@ -150,7 +150,8 @@ const FRI_SERIES = [
 ────────────────────────────────────────────────────────── */
 let allRows     = [];
 let currentSess = 'all';
-let currentBan  = 'all';   // 'all' | '五-早' | '五-晚' | '四-早' ...
+let currentBan  = '';
+let lastBanKey  = null;   // 最後一個有資料的盤（備用）
 let chart       = null;
 
 /* ──────────────────────────────────────────────────────────
@@ -415,7 +416,7 @@ function buildBanButtons() {
   const wrap = document.getElementById('ban-wrap');
   wrap.innerHTML = '';
 
-  let lastKey = null;
+  lastBanKey = null;
   ORDER.forEach(({ day, sess }) => {
     const wantEarly = sess === '早';
     const hasData = allRows.some(r =>
@@ -430,11 +431,31 @@ function buildBanButtons() {
     btn.textContent = `${day}天${sess}盤`;
     btn.onclick = () => setBan(key);
     wrap.appendChild(btn);
-    lastKey = key;   // 記錄最後一個（剩餘天數最少 = 當盤）
+    lastBanKey = key;
   });
+}
 
-  // 自動選到最近的盤
-  if (lastKey) setBan(lastKey);
+function autoSelectCurrentBan() {
+  // 1. 從真實時鐘判斷現在是早盤還是晚盤
+  const now  = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  let sessChar;
+  if (mins >= 8*60+45 && mins <= 13*60+45) sessChar = '早';
+  else if (mins >= 15*60 || mins <= 5*60)  sessChar = '晚';
+  else { if (lastBanKey) setBan(lastBanKey); return; }  // 盤間空檔 → 選最後一盤
+
+  // 2. 從資料末端找最新的剩餘天數
+  let latestDay = null;
+  for (let i = allRows.length - 1; i >= 0; i--) {
+    const d = String(allRows[i][COL.days] || '').trim();
+    if (d) { latestDay = d; break; }
+  }
+  if (!latestDay) { if (lastBanKey) setBan(lastBanKey); return; }
+
+  // 3. 組合成 key 並嘗試選取，找不到就 fallback 到最後一盤
+  const key = `${latestDay}-${sessChar}`;
+  if (document.getElementById(`ban-${key}`)) setBan(key);
+  else if (lastBanKey) setBan(lastBanKey);
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -560,9 +581,9 @@ async function loadData() {
       .filter(r => r.length >= 3 && r[COL.days] && r[COL.time]);
 
     buildBanButtons();
+    autoSelectCurrentBan();
     setStatus(`已載入 ${allRows.length} 筆資料`);
     setLastUpdate();
-    renderChart();
   } catch (e) {
     setStatus(`載入失敗：${e.message}`, false);
     console.error(e);
