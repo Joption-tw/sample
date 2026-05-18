@@ -68,9 +68,7 @@
     <!-- 10-盤 selector (dynamically populated) -->
     <div class="flex flex-wrap items-center gap-2">
       <span class="text-xs text-gray-500 w-16 shrink-0">選　盤</span>
-      <div id="ban-wrap" class="flex flex-wrap gap-1.5">
-        <button onclick="setBan('all')" id="ban-all" class="chip active">全部</button>
-      </div>
+      <div id="ban-wrap" class="flex flex-wrap gap-1.5"></div>
     </div>
   </div>
 
@@ -415,8 +413,9 @@ function buildBanButtons() {
   ];
 
   const wrap = document.getElementById('ban-wrap');
-  wrap.innerHTML = '<button onclick="setBan(\'all\')" id="ban-all" class="chip active">全部</button>';
+  wrap.innerHTML = '';
 
+  let lastKey = null;
   ORDER.forEach(({ day, sess }) => {
     const wantEarly = sess === '早';
     const hasData = allRows.some(r =>
@@ -431,7 +430,11 @@ function buildBanButtons() {
     btn.textContent = `${day}天${sess}盤`;
     btn.onclick = () => setBan(key);
     wrap.appendChild(btn);
+    lastKey = key;   // 記錄最後一個（剩餘天數最少 = 當盤）
   });
+
+  // 自動選到最近的盤
+  if (lastKey) setBan(lastKey);
 }
 
 /* ──────────────────────────────────────────────────────────
