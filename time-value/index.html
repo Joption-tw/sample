@@ -213,12 +213,24 @@ function getActiveSeries() {
   return [...WED_SERIES, ...FRI_SERIES];
 }
 
+// ── 與 sample 網站相同的時間解析邏輯 ──
+const DAY_START   = 8  * 60 + 45;   // 08:45
+const DAY_END     = 13 * 60 + 45;   // 13:45
+const NIGHT_START = 15 * 60;         // 15:00
+const NIGHT_END   = 5  * 60;         // 05:00
+
+function parseTimeMins(timeStr) {
+  const s = String(timeStr || '').trim();
+  const t = s.includes(' ') ? s.split(' ').pop() : s;
+  const m = t.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return parseInt(m[1]) * 60 + parseInt(m[2]);
+}
+
 function isEarlySession(timeStr) {
-  // 從字串任意位置抓最後一個 HH:MM，相容「15:02」「五 15:02」「2024/01/15 09:30」等格式
-  const m = String(timeStr || '').match(/(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*$|[^0-9]|$)/);
-  if (!m) return false;   // 無法解析視為夜盤
-  const mins = parseInt(m[1]) * 60 + parseInt(m[2]);
-  return mins >= 8 * 60 + 45 && mins <= 13 * 60 + 45;  // 早盤 08:45~13:45
+  const t = parseTimeMins(timeStr);
+  if (t === null) return false;
+  return t >= DAY_START && t <= DAY_END;
 }
 
 function buildChartData() {
@@ -440,8 +452,8 @@ function autoSelectCurrentBan() {
   const now  = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
   let sessChar;
-  if (mins >= 8*60+45 && mins <= 13*60+45) sessChar = '早';
-  else if (mins >= 15*60 || mins <= 5*60)  sessChar = '晚';
+  if (mins >= DAY_START   && mins <= DAY_END)              sessChar = '早';
+  else if (mins >= NIGHT_START || mins <= NIGHT_END)       sessChar = '晚';
   else { if (lastBanKey) setBan(lastBanKey); return; }  // 盤間空檔 → 選最後一盤
 
   // 2. 從資料末端找最新的剩餘天數
@@ -480,15 +492,9 @@ function setBan(key) {
 /* ──────────────────────────────────────────────────────────
    降幅計算
 ────────────────────────────────────────────────────────── */
-function timeToMins(timeStr) {
-  const m = String(timeStr || '').match(/(\d{1,2}):(\d{2})/);
-  if (!m) return null;
-  return parseInt(m[1]) * 60 + parseInt(m[2]);
-}
-
 function windowAvg(rows, colIdx, fromMins, toMins) {
   const vals = rows
-    .filter(r => { const t = timeToMins(r[COL.time]); return t !== null && t >= fromMins && t <= toMins; })
+    .filter(r => { const t = parseTimeMins(r[COL.time]); return t !== null && t >= fromMins && t <= toMins; })
     .map(r => toNum(r[colIdx]))
     .filter(v => v !== null);
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
