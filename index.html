@@ -91,6 +91,43 @@
 
         @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         .live-indicator { animation: pulse-soft 2s infinite; }
+
+        /* ===== 手機橫向（打橫）：整頁壓縮成一個舒服的全畫面，比照桌面版排列 ===== */
+        @media (orientation: landscape) and (max-height: 600px) {
+            body { padding: 4px !important; }
+            #capture-root { gap: 0 !important; padding: 0 !important; max-width: 100% !important; }
+            #capture-root > * + * { margin-top: 4px !important; }
+
+            /* 頁首：三欄橫排、按鈕並排、縮高 */
+            header { display: grid !important; grid-template-columns: auto 1fr auto !important;
+                     min-height: 0 !important; padding: 3px 10px !important; gap: 8px !important; }
+            header h1 { font-size: 1rem !important; line-height: 1.1 !important; margin-bottom: 0 !important; }
+            header .w-10 { width: 1.9rem !important; height: 1.9rem !important; }
+            header #refresh-btn, header button[onclick="takeScreenshot()"] { padding: 3px 8px !important; font-size: 10px !important; }
+            .flex.flex-row.sm\:flex-col { flex-direction: row !important; gap: 4px !important; min-width: 0 !important; width: auto !important; }
+
+            /* 七張統計卡一整排（比照桌面 lg 版） */
+            [class*="lg:grid-cols-7"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: 4px !important; }
+            [class*="lg:grid-cols-7"] .glass-card { min-height: 0 !important; padding: 3px 4px !important; }
+            #capture-root .stat-value { font-size: 12px !important; }
+
+            /* 十個盤別按鈕一整排（比照桌面 md 版） */
+            #session-switcher { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; }
+            .session-btn { padding: 3px 2px !important; font-size: 10px !important; }
+
+            /* 圖表控制列：單行橫排、隱藏「左/右軸顯示」小標與中間圖例（改由色塊按鈕表示） */
+            #ui-axis-controls { flex-direction: row !important; flex-wrap: nowrap !important; justify-content: space-between !important;
+                                align-items: center !important; margin-bottom: 4px !important; gap: 8px !important; }
+            #ui-axis-controls > div > span.uppercase { display: none !important; }
+            #dynamic-legend { display: none !important; }
+
+            /* 圖表高度依剩餘視窗高度自動縮放，讓整頁不用捲動 */
+            .glass-card.p-2 { padding: 4px !important; }
+            #performance-chart { height: calc(100vh - 196px) !important; height: calc(100dvh - 196px) !important; min-height: 180px !important; }
+
+            /* 頁尾縮扁 */
+            footer { padding: 3px 10px !important; }
+        }
     </style>
 </head>
 <body class="p-1.5 sm:p-4">
