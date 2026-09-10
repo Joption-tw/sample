@@ -102,35 +102,38 @@
                 height: 100vh; height: 100svh;
                 max-height: 100vh; max-height: 100svh;
                 display: flex !important; flex-direction: column !important;
-                gap: 3px !important; padding: 0 !important; margin: 0 auto !important;
+                gap: 2px !important; padding: 0 !important; margin: 0 auto !important;
                 max-width: 100% !important; overflow: hidden !important;
             }
             #capture-root > * { margin: 0 !important; flex: 0 0 auto; }
 
-            /* 頁首：單行極簡，只留標題與按鈕 */
+            /* 頁首：單行極簡、壓到最扁，只留標題與按鈕 */
             header { display: flex !important; flex-direction: row !important; align-items: center !important;
                      justify-content: space-between !important; min-height: 0 !important;
-                     padding: 2px 8px !important; gap: 8px !important; }
+                     padding: 1px 8px !important; gap: 8px !important; }
             header > div:first-child { flex: 0 0 auto !important; }
-            header .w-10 { width: 1.6rem !important; height: 1.6rem !important; }
+            header .w-10 { width: 1.4rem !important; height: 1.4rem !important; }
             header #update-time-mobile { display: none !important; }
             header > div:nth-child(2) { flex: 1 1 auto !important; padding: 0 !important; }
-            header h1 { font-size: 0.95rem !important; line-height: 1.1 !important; margin: 0 !important; }
+            header h1 { font-size: 0.85rem !important; line-height: 1.05 !important; margin: 0 !important; }
             header > div:nth-child(2) > div { display: none !important; }   /* 隱藏 示範帳戶/版本/LIVE 那一列 */
             header > div:last-child { flex: 0 0 auto !important; width: auto !important; }
             .flex.flex-row.sm\:flex-col { flex-direction: row !important; gap: 4px !important; min-width: 0 !important; width: auto !important; }
-            header #refresh-btn, header button[onclick="takeScreenshot()"] { padding: 3px 8px !important; font-size: 10px !important; }
+            header #refresh-btn, header button[onclick="takeScreenshot()"] { padding: 2px 7px !important; font-size: 9px !important; }
+            header #refresh-btn i, header button[onclick="takeScreenshot()"] i { width: 11px !important; height: 11px !important; }
 
-            /* 七張統計卡一整排 */
-            [class*="lg:grid-cols-7"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: 4px !important; }
-            [class*="lg:grid-cols-7"] .glass-card { min-height: 0 !important; padding: 2px 4px !important; }
-            [class*="lg:grid-cols-7"] .glass-card p:first-child { font-size: 8px !important; line-height: 1.15 !important; }
-            #capture-root .stat-value { font-size: 12px !important; }
+            /* 七張統計卡一整排：壓到最扁，數字為主 */
+            [class*="lg:grid-cols-7"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: 3px !important; }
+            [class*="lg:grid-cols-7"] .glass-card { min-height: 0 !important; padding: 1px 4px !important; border-left-width: 3px !important; }
+            [class*="lg:grid-cols-7"] .glass-card p:first-child { font-size: 7px !important; line-height: 1.1 !important; margin: 0 !important; }
+            #capture-root .stat-value { font-size: 11px !important; line-height: 1.15 !important; }
+            #stat-wed-chg, #stat-fri-chg { font-size: 7px !important; line-height: 1 !important; margin-top: 0 !important;
+                                           white-space: nowrap !important; overflow: hidden !important; }
 
-            /* 十個盤別按鈕一整排 */
-            #ui-switcher-container { padding: 2px !important; }
-            #session-switcher { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; }
-            .session-btn { padding: 3px 2px !important; font-size: 10px !important; }
+            /* 十個盤別按鈕一整排：壓扁 */
+            #ui-switcher-container { padding: 1px !important; }
+            #session-switcher { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; gap: 2px !important; }
+            .session-btn { padding: 2px 2px !important; font-size: 10px !important; border-radius: 0.3rem !important; }
 
             /* 圖表卡：撐滿剩餘高度 */
             .glass-card.p-2 {
@@ -629,6 +632,9 @@
 
         function updateChartUI() {
             if (!myChart || !globalData) return;
+            // 手機（含打橫的手機：寬度雖大但高度很矮）都視為 mobile
+            const isMobile = window.innerWidth < 768
+                || window.matchMedia('(orientation: landscape) and (max-height: 600px)').matches;
             document.getElementById('btn-l-idx').className = `mode-btn l-idx ${axisState.lIdx ? 'active' : ''}`;
             document.getElementById('btn-l-tot').className = `mode-btn l-tot ${axisState.lTot ? 'active' : ''}`;
             document.getElementById('btn-r-prf').className = `mode-btn r-prf ${axisState.rPrf ? 'active' : ''}`;
@@ -655,15 +661,28 @@
                 { name: '期指', data: axisState.lIdx ? globalData.yPrice : [], markPoint: axisState.lIdx ? getMarkPoint('期指', 'idx') : { data: [] } },
                 { name: '總點數', data: axisState.lTot ? globalData.yTotal : [], markPoint: axisState.lTot ? getMarkPoint('總點數', 'val') : { data: [] } }
             ];
+            const axOffset = isMobile ? 30 : 50;
             const yAxes = [
                 { type: 'value', name: '期指', position: 'left', offset: 0, show: axisState.lIdx, axisLabel: { color: '#2563eb', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, min: 'dataMin', max: 'dataMax', scale: true },
-                { type: 'value', name: '總點', position: 'left', offset: axisState.lIdx ? 50 : 0, show: axisState.lTot, axisLabel: { color: '#475569', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: 0, max: 5000 },
+                { type: 'value', name: '總點', position: 'left', offset: axisState.lIdx ? axOffset : 0, show: axisState.lTot, axisLabel: { color: '#475569', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: 0, max: 5000 },
                 { type: 'value', name: '獲利%', position: 'right', offset: 0, show: axisState.rPrf, axisLabel: { color: '#e11d48', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: -1, max: 5 },
-                { type: 'value', name: '時價', position: 'right', offset: axisState.rPrf ? 50 : 0, show: axisState.rTmv, axisLabel: { color: '#9333ea', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false } }
+                { type: 'value', name: '時價', position: 'right', offset: axisState.rPrf ? axOffset : 0, show: axisState.rTmv, axisLabel: { color: '#9333ea', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false } }
             ];
-            const isMobile = window.innerWidth < 768;
-            const dZoom = [ { type: 'slider', xAxisIndex: 0, bottom: 0, height: 20 }, { type: 'slider', yAxisIndex: 0, left: 0, width: 18, show: axisState.lIdx }, { type: 'slider', yAxisIndex: 1, left: axisState.lIdx ? 40 : 0, width: 18, show: axisState.lTot }, { type: 'slider', yAxisIndex: 2, right: 0, width: 18, show: axisState.rPrf }, { type: 'slider', yAxisIndex: 3, right: axisState.rPrf ? 40 : 0, width: 18, show: axisState.rTmv }, { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile } ];
-            myChart.setOption({ textStyle: { fontFamily: 'Arial' }, grid: { left: (leftAxesCount * 55) + 15, right: (rightAxesCount * 55) + 15, top: '8%', bottom: '15%' }, yAxis: yAxes, dataZoom: dZoom, series: seriesConfig.map(s => ({ name: s.name, data: s.data, markPoint: s.markPoint })) });
+            // 手機：拿掉左右四條垂直拉霸（很難操作），改用單指拖曳／雙指縮放；只留底部時間軸滑桿並加大觸控範圍
+            const showYSlider = !isMobile;
+            const dZoom = [
+                { type: 'slider', xAxisIndex: 0, bottom: 0, height: isMobile ? 16 : 20, brushSelect: false,
+                  handleSize: isMobile ? 24 : '100%', moveHandleSize: isMobile ? 9 : 7,
+                  fillerColor: 'rgba(37, 99, 235, 0.12)', borderColor: 'transparent' },
+                { type: 'slider', yAxisIndex: 0, left: 0, width: 18, show: showYSlider && axisState.lIdx },
+                { type: 'slider', yAxisIndex: 1, left: axisState.lIdx ? 40 : 0, width: 18, show: showYSlider && axisState.lTot },
+                { type: 'slider', yAxisIndex: 2, right: 0, width: 18, show: showYSlider && axisState.rPrf },
+                { type: 'slider', yAxisIndex: 3, right: axisState.rPrf ? 40 : 0, width: 18, show: showYSlider && axisState.rTmv },
+                { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile }
+            ];
+            const gridL = isMobile ? (leftAxesCount * 34 + 6)  : (leftAxesCount * 55 + 15);
+            const gridR = isMobile ? (rightAxesCount * 34 + 6) : (rightAxesCount * 55 + 15);
+            myChart.setOption({ textStyle: { fontFamily: 'Arial' }, grid: { left: gridL, right: gridR, top: isMobile ? 14 : '8%', bottom: isMobile ? 28 : '15%' }, yAxis: yAxes, dataZoom: dZoom, series: seriesConfig.map(s => ({ name: s.name, data: s.data, markPoint: s.markPoint })) });
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
         }
 
