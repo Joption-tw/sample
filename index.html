@@ -92,23 +92,44 @@
         @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         .live-indicator { animation: pulse-soft 2s infinite; }
 
-        /* 個別 Y 軸縮放控制（只在手機顯示，桌機用原本的垂直拉霸） */
-        #y-zoom-mobile { display: none; }
+        /* 個別 Y 軸縮放控制（電腦 / 手機皆適用；同時兼作圖例） */
         #refresh-btn, button[onclick="takeScreenshot()"] { touch-action: manipulation; }
+        #dynamic-legend { display: none !important; }   /* 改由下方色塊藥丸鈕兼作圖例 */
 
-        @media (max-width: 767px), (orientation: landscape) and (max-height: 600px) {
-            #y-zoom-mobile {
-                display: flex !important; align-items: center; justify-content: center;
-                flex-wrap: wrap; gap: 5px; padding: 2px 4px; width: 100%;
-            }
-            #y-zoom-mobile .yz-chip { display: flex; align-items: center; gap: 3px;
-                background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px; padding: 2px 3px; flex: 0 0 auto; }
-            #y-zoom-mobile .yz-chip > span { font-size: 10px; font-weight: 900; line-height: 1; white-space: nowrap; }
-            #y-zoom-mobile button { width: 24px; height: 24px; border-radius: 5px; background: #fff;
-                border: 1px solid #cbd5e1; font-size: 15px; font-weight: 900; line-height: 1; color: #334155;
-                display: flex; align-items: center; justify-content: center; padding: 0; touch-action: manipulation; }
-            #y-zoom-mobile button:active { background: #e2e8f0; transform: scale(0.92); }
-            #y-zoom-mobile .yz-reset { font-size: 13px; color: #64748b; }
+        #y-zoom-mobile {
+            display: flex; align-items: center; justify-content: center;
+            flex-wrap: wrap; gap: 6px; padding: 2px 4px; flex: 1 1 auto;
+        }
+        #y-zoom-mobile .yz-hint { font-size: 10px; font-weight: 900; color: #94a3b8; white-space: nowrap; margin-right: 2px; }
+        /* 每條線一顆藥丸鈕：點一下把該線放到最大（max→95%、min→5%）；亮起＝目前鎖定中 */
+        #y-zoom-mobile .yz-pick {
+            min-height: 28px; padding: 4px 12px; border-radius: 999px;
+            font-size: 12px; font-weight: 900; line-height: 1; white-space: nowrap;
+            color: var(--c, #334155); background: #fff; border: 1.5px solid var(--c, #cbd5e1);
+            display: flex; align-items: center; gap: 5px; touch-action: manipulation; cursor: pointer;
+            transition: background .12s, color .12s;
+        }
+        #y-zoom-mobile .yz-pick::before {
+            content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--c, #94a3b8); flex: 0 0 auto;
+        }
+        #y-zoom-mobile .yz-pick.on { color: #fff; background: var(--c, #334155); border-color: var(--c, #334155); }
+        #y-zoom-mobile .yz-pick.on::before { background: #fff; }
+        #y-zoom-mobile .yz-pick:hover { border-color: var(--c, #94a3b8); }
+        #y-zoom-mobile .yz-pick:active { transform: scale(0.95); }
+        #y-zoom-mobile .yz-reset {
+            min-height: 28px; min-width: 32px; padding: 4px 9px; border-radius: 999px;
+            font-size: 15px; font-weight: 900; line-height: 1; color: #64748b;
+            background: #fff; border: 1.5px solid #cbd5e1;
+            display: flex; align-items: center; justify-content: center; touch-action: manipulation; cursor: pointer;
+        }
+        #y-zoom-mobile .yz-reset:hover { border-color: #94a3b8; color: #334155; }
+        #y-zoom-mobile .yz-reset:active { transform: scale(0.95); background: #e2e8f0; }
+
+        @media (max-width: 767px) {
+            #y-zoom-mobile { width: 100%; gap: 5px; }
+            #y-zoom-mobile .yz-hint { font-size: 9px; }
+            #y-zoom-mobile .yz-pick { min-height: 26px; padding: 3px 10px; font-size: 11px; }
+            #y-zoom-mobile .yz-reset { min-height: 26px; font-size: 14px; }
         }
 
         /* ===== 手機橫向（打橫）：資料填滿整個可視畫面，完全不捲動、不被瀏覽器列遮住 ===== */
@@ -174,8 +195,8 @@
             /* 個別 Y 軸縮放：橫向時擠成單行、填滿中間空白處 */
             #y-zoom-mobile { flex: 1 1 auto !important; width: auto !important;
                              flex-wrap: nowrap !important; overflow-x: auto !important; padding: 0 4px !important; }
-            #y-zoom-mobile .yz-chip > span { font-size: 9px !important; }
-            #y-zoom-mobile button { width: 22px !important; height: 22px !important; font-size: 14px !important; }
+            #y-zoom-mobile .yz-pick { min-height: 24px !important; padding: 2px 9px !important; font-size: 10px !important; }
+            #y-zoom-mobile .yz-reset { min-height: 24px !important; font-size: 13px !important; }
 
             /* 圖表本體：填滿卡片剩餘空間 */
             #performance-chart { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; }
@@ -337,6 +358,17 @@
         let globalData = null;
         let currentSessionIdx = -1;
         let axisState = { lIdx: false, lTot: true, rPrf: true, rTmv: true };
+
+        // 每個 Y 軸可鎖定一條線，讓「該線」在圖上撐滿（最大值→95%、最小值→5%）
+        // yAxisIndex: 0=期指, 1=總點數, 2=獲利率, 3=時間價值(週三/週五共用)
+        const AXIS_SERIES = {
+            0: [{ key: 'idx', label: '期指',   arr: 'yPrice',   on: () => axisState.lIdx, color: '#2563eb' }],
+            1: [{ key: 'tot', label: '總點',   arr: 'yTotal',   on: () => axisState.lTot, color: '#475569' }],
+            2: [{ key: 'prf', label: '獲利率', arr: 'yProfit',  on: () => axisState.rPrf, color: '#e11d48' }],
+            3: [{ key: 'wed', label: '週三',   arr: 'yTimeWed', on: () => axisState.rTmv, color: '#ef4444' },
+                { key: 'fri', label: '週五',   arr: 'yTimeFri', on: () => axisState.rTmv, color: '#10b981' }]
+        };
+        let yFrameLock = {};      // 手機用：{ 3: 'wed' } 代表時間價值軸目前鎖定框選「週三」那條線
 
         const rowRanges = [
             { label: '周三晚', start: 2, end: 419, type: 'night' },
@@ -662,38 +694,43 @@
             updateChartUI();
         }
 
-        // 個別 Y 軸縮放：dz 為 dataZoom 索引（1=期指, 2=總點, 3=獲利率, 4=時間價值）
-        // dir: 'in' 放大該軸（線條變高/更明顯）、'out' 縮小
-        function yZoom(dz, dir) {
-            if (!myChart) return;
-            const comp = (myChart.getOption().dataZoom || [])[dz] || {};
-            let s = (comp.start == null ? 0 : comp.start);
-            let e = (comp.end == null ? 100 : comp.end);
-            const center = (s + e) / 2;
-            let half = (e - s) / 2;
-            half = dir === 'in' ? half * 0.75 : half * 1.33;
-            half = Math.max(1.5, Math.min(50, half));
-            myChart.dispatchAction({ type: 'dataZoom', dataZoomIndex: dz,
-                start: Math.max(0, center - half), end: Math.min(100, center + half) });
+        // 點某條線 → 鎖定該線，讓它在圖上撐滿（最大值→95%、最小值→5%）；再點一次或按 ⟲ 解除
+        function yFit(axisIdx, key) {
+            if (yFrameLock[axisIdx] === key) delete yFrameLock[axisIdx];
+            else yFrameLock[axisIdx] = key;
+            buildYZoomBar();
+            if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
         }
         function resetYZoom() {
+            yFrameLock = {};
+            buildYZoomBar();
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
+        }
+        // 計算一組數值的軸範圍：min 落在 5%、max 落在 95%
+        function fitRange(vals) {
+            const v = vals.filter(x => x !== null && x !== undefined && !isNaN(x));
+            if (v.length < 2) return null;
+            let lo = Math.min(...v), hi = Math.max(...v);
+            if (lo === hi) { const d = Math.abs(lo) || 1; return { min: +(lo - d * 0.1).toFixed(4), max: +(hi + d * 0.1).toFixed(4) }; }
+            const pad = (hi - lo) / 18;               // => lo 在 5%、hi 在 95%
+            return { min: +(lo - pad).toFixed(4), max: +(hi + pad).toFixed(4) };
         }
         function buildYZoomBar() {
             const bar = document.getElementById('y-zoom-mobile');
             if (!bar) return;
-            const meta = [
-                { on: axisState.lIdx, dz: 1, label: '期指',   color: '#2563eb' },
-                { on: axisState.lTot, dz: 2, label: '總點',   color: '#475569' },
-                { on: axisState.rPrf, dz: 3, label: '獲利率', color: '#e11d48' },
-                { on: axisState.rTmv, dz: 4, label: '時間價值', color: '#9333ea' }
-            ].filter(m => m.on);
-            if (!meta.length) { bar.innerHTML = ''; return; }
-            bar.innerHTML = meta.map(m =>
-                `<div class="yz-chip"><span style="color:${m.color}">${m.label}</span>` +
-                `<button type="button" onclick="yZoom(${m.dz},'out')" aria-label="${m.label} 縮小">－</button>` +
-                `<button type="button" onclick="yZoom(${m.dz},'in')" aria-label="${m.label} 放大">＋</button></div>`
-            ).join('') + `<button type="button" class="yz-reset" onclick="resetYZoom()" aria-label="重設縮放">⟲</button>`;
+            const items = [];
+            Object.keys(AXIS_SERIES).forEach(ai => AXIS_SERIES[ai].forEach(s => {
+                if (s.on()) items.push({ ai: +ai, key: s.key, label: s.label, color: s.color });
+            }));
+            if (!items.length) { bar.innerHTML = ''; return; }
+            bar.innerHTML =
+                `<span class="yz-hint">點圖示放最大</span>` +
+                items.map(it => {
+                    const on = yFrameLock[it.ai] === it.key;
+                    return `<button type="button" class="yz-pick${on ? ' on' : ''}" style="--c:${it.color}" ` +
+                           `onclick="yFit(${it.ai},'${it.key}')">${it.label}</button>`;
+                }).join('') +
+                `<button type="button" class="yz-reset" onclick="resetYZoom()" aria-label="重設">⟲</button>`;
         }
 
         function updateChartUI() {
@@ -735,8 +772,9 @@
                 { type: 'value', name: '獲利%', position: 'right', offset: 0, show: axisState.rPrf, axisLabel: { color: '#e11d48', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: -1, max: 5 },
                 { type: 'value', name: '時價', position: 'right', offset: axisState.rPrf ? axOffset : 0, show: axisState.rTmv, axisLabel: { color: '#9333ea', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false } }
             ];
-            // 手機：拿掉左右四條垂直拉霸（很難操作），改用單指拖曳／雙指縮放；只留底部時間軸滑桿並加大觸控範圍
-            const showYSlider = !isMobile;
+            // 左右四條垂直拉霸全部拿掉（電腦/手機都很難用），改用下方「每條線一顆藥丸鈕」點一下放到最大；
+            // 只留底部時間軸滑桿，並在手機加大觸控範圍
+            const showYSlider = false;
             const dZoom = [
                 { type: 'slider', xAxisIndex: 0, bottom: 0, height: isMobile ? 16 : 20, brushSelect: false,
                   handleSize: isMobile ? 24 : '100%', moveHandleSize: isMobile ? 9 : 7,
@@ -813,25 +851,27 @@
 
             const sPct = (si / globalData.x.length) * 100;
             const ePct = (ei / globalData.x.length) * 100;
-            const getPct = (v, min, max) => (min >= max) ? 50 : Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
-            let batch = [{ dataZoomIndex: 0, start: sPct, end: ePct }];
-            if (axisState.lIdx) {
-                const sp = globalData.yPrice.slice(si, ei + 1).filter(v => v !== null);
-                if (sp.length > 0) { const pMin = Math.min(...sp)*0.998, pMax = Math.max(...sp)*1.002; batch.push({ dataZoomIndex: 1, start: getPct(pMin, pMin, pMax), end: getPct(pMax, pMin, pMax) }); }
-            }
-            if (axisState.lTot) {
-                const st = globalData.yTotal.slice(si, ei + 1).filter(v => v !== null);
-                if (st.length > 0) batch.push({ dataZoomIndex: 2, start: getPct(Math.min(...st)*0.95, 0, 5000), end: getPct(Math.max(...st)*1.05, 0, 5000) });
-            }
-            if (axisState.rPrf && spr.length > 0) batch.push({ dataZoomIndex: 3, start: getPct(Math.min(...spr)-0.1, -1, 5), end: getPct(Math.max(...spr)+0.1, -1, 5) });
-            if (axisState.rTmv) {
-                const subT = [...sw, ...sf];
-                if (subT.length > 0) {
-                    const allT = [...globalData.yTimeWed, ...globalData.yTimeFri].filter(v=>v!==null);
-                    batch.push({ dataZoomIndex: 4, start: getPct(Math.min(...subT)-5, Math.min(...allT), Math.max(...allT)), end: getPct(Math.max(...subT)+5, Math.min(...allT), Math.max(...allT)) });
+            myChart.dispatchAction({ type: 'dataZoom', batch: [{ dataZoomIndex: 0, start: sPct, end: ePct }] });
+
+            // ── 每個 Y 軸直接用數值 min/max 撐滿（最大值→95%、最小值→5%），電腦 / 手機皆適用 ──
+            //    預設：用該軸「所有啟用線」的合併範圍
+            //    若某軸有被點選鎖定某條線（例如時間價值軸點了「週三」）：只框那條線，讓它完整撐滿
+            const curY = myChart.getOption().yAxis.map(a => Object.assign({}, a));
+            [0, 1, 2, 3].forEach(ai => {
+                const ser = AXIS_SERIES[ai].filter(s => s.on());
+                if (!ser.length) return;                       // 該軸沒顯示，不動
+                const lockKey = yFrameLock[ai];
+                let vals = [];
+                if (lockKey && ser.some(s => s.key === lockKey)) {
+                    vals = globalData[ser.find(s => s.key === lockKey).arr].slice(si, ei + 1);
+                } else {
+                    ser.forEach(s => { vals = vals.concat(globalData[s.arr].slice(si, ei + 1)); });
                 }
-            }
-            myChart.dispatchAction({ type: 'dataZoom', batch });
+                const f = fitRange(vals);
+                if (f) { curY[ai].min = f.min; curY[ai].max = f.max; if (ai === 0) curY[ai].scale = false; }
+            });
+            myChart.setOption({ yAxis: curY });
+            myChart.dispatchAction({ type: 'dataZoom', batch: [1, 2, 3, 4].map(i => ({ dataZoomIndex: i, start: 0, end: 100 })) });
         }
 
         function initChart(data) {
@@ -859,7 +899,7 @@
                 },
                 xAxis: { type: 'category', data: data.x, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 10, rotate: 30, fontFamily: 'Arial' }, axisLine: { lineStyle: { color: '#f1f5f9' } } },
                 yAxis: [ { type: 'value', name: '期指', position: 'left' }, { type: 'value', name: '總點', position: 'left' }, { type: 'value', name: '獲利%', position: 'right' }, { type: 'value', name: '時價', position: 'right' } ],
-                dataZoom: [ { type: 'slider', xAxisIndex: 0 }, { type: 'slider', yAxisIndex: 0 }, { type: 'slider', yAxisIndex: 1 }, { type: 'slider', yAxisIndex: 2 }, { type: 'slider', yAxisIndex: 3 }, { type: 'inside', xAxisIndex: 0 } ],
+                dataZoom: [ { type: 'slider', xAxisIndex: 0 }, { type: 'slider', yAxisIndex: 0, show: false }, { type: 'slider', yAxisIndex: 1, show: false }, { type: 'slider', yAxisIndex: 2, show: false }, { type: 'slider', yAxisIndex: 3, show: false }, { type: 'inside', xAxisIndex: 0 } ],
                 series: [
                     { type: 'line', data: [], markArea: { silent: true, data: markAreas }, silent: true },
                     { name: '獲利率', type: 'line', yAxisIndex: 2, data: data.yProfit, smooth: true, showSymbol: false, lineStyle: { width: 0 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(225, 29, 72, 0.7)' }, { offset: 1, color: 'rgba(225, 29, 72, 0.05)' }]) }, z: 1 },
