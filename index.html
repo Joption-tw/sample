@@ -92,41 +92,62 @@
         @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         .live-indicator { animation: pulse-soft 2s infinite; }
 
-        /* ===== 手機橫向（打橫）：整頁壓縮成一個舒服的全畫面，比照桌面版排列 ===== */
+        /* ===== 手機橫向（打橫）：資料填滿整個可視畫面，完全不捲動、不被瀏覽器列遮住 ===== */
         @media (orientation: landscape) and (max-height: 600px) {
-            body { padding: 4px !important; }
-            #capture-root { gap: 0 !important; padding: 0 !important; max-width: 100% !important; }
-            #capture-root > * + * { margin-top: 4px !important; }
+            html, body { height: 100%; overflow: hidden !important; }
+            body { padding: 3px !important; }
 
-            /* 頁首：三欄橫排、按鈕並排、縮高 */
-            header { display: grid !important; grid-template-columns: auto 1fr auto !important;
-                     min-height: 0 !important; padding: 3px 10px !important; gap: 8px !important; }
-            header h1 { font-size: 1rem !important; line-height: 1.1 !important; margin-bottom: 0 !important; }
-            header .w-10 { width: 1.9rem !important; height: 1.9rem !important; }
-            header #refresh-btn, header button[onclick="takeScreenshot()"] { padding: 3px 8px !important; font-size: 10px !important; }
+            /* 整頁塞進「可視視窗高度」(svh：已扣掉瀏覽器工具列)，用 flex 直向排列 */
+            #capture-root {
+                height: 100vh; height: 100svh;
+                max-height: 100vh; max-height: 100svh;
+                display: flex !important; flex-direction: column !important;
+                gap: 3px !important; padding: 0 !important; margin: 0 auto !important;
+                max-width: 100% !important; overflow: hidden !important;
+            }
+            #capture-root > * { margin: 0 !important; flex: 0 0 auto; }
+
+            /* 頁首：單行極簡，只留標題與按鈕 */
+            header { display: flex !important; flex-direction: row !important; align-items: center !important;
+                     justify-content: space-between !important; min-height: 0 !important;
+                     padding: 2px 8px !important; gap: 8px !important; }
+            header > div:first-child { flex: 0 0 auto !important; }
+            header .w-10 { width: 1.6rem !important; height: 1.6rem !important; }
+            header #update-time-mobile { display: none !important; }
+            header > div:nth-child(2) { flex: 1 1 auto !important; padding: 0 !important; }
+            header h1 { font-size: 0.95rem !important; line-height: 1.1 !important; margin: 0 !important; }
+            header > div:nth-child(2) > div { display: none !important; }   /* 隱藏 示範帳戶/版本/LIVE 那一列 */
+            header > div:last-child { flex: 0 0 auto !important; width: auto !important; }
             .flex.flex-row.sm\:flex-col { flex-direction: row !important; gap: 4px !important; min-width: 0 !important; width: auto !important; }
+            header #refresh-btn, header button[onclick="takeScreenshot()"] { padding: 3px 8px !important; font-size: 10px !important; }
 
-            /* 七張統計卡一整排（比照桌面 lg 版） */
+            /* 七張統計卡一整排 */
             [class*="lg:grid-cols-7"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: 4px !important; }
-            [class*="lg:grid-cols-7"] .glass-card { min-height: 0 !important; padding: 3px 4px !important; }
+            [class*="lg:grid-cols-7"] .glass-card { min-height: 0 !important; padding: 2px 4px !important; }
+            [class*="lg:grid-cols-7"] .glass-card p:first-child { font-size: 8px !important; line-height: 1.15 !important; }
             #capture-root .stat-value { font-size: 12px !important; }
 
-            /* 十個盤別按鈕一整排（比照桌面 md 版） */
+            /* 十個盤別按鈕一整排 */
+            #ui-switcher-container { padding: 2px !important; }
             #session-switcher { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; }
             .session-btn { padding: 3px 2px !important; font-size: 10px !important; }
 
-            /* 圖表控制列：單行橫排、隱藏「左/右軸顯示」小標與中間圖例（改由色塊按鈕表示） */
-            #ui-axis-controls { flex-direction: row !important; flex-wrap: nowrap !important; justify-content: space-between !important;
-                                align-items: center !important; margin-bottom: 4px !important; gap: 8px !important; }
+            /* 圖表卡：撐滿剩餘高度 */
+            .glass-card.p-2 {
+                flex: 1 1 auto !important; min-height: 0 !important;
+                display: flex !important; flex-direction: column !important; padding: 4px !important;
+            }
+            #ui-axis-controls { flex: 0 0 auto !important; flex-direction: row !important; flex-wrap: nowrap !important;
+                                justify-content: space-between !important; align-items: center !important;
+                                margin-bottom: 3px !important; gap: 8px !important; }
             #ui-axis-controls > div > span.uppercase { display: none !important; }
             #dynamic-legend { display: none !important; }
 
-            /* 圖表高度依剩餘視窗高度自動縮放，讓整頁不用捲動 */
-            .glass-card.p-2 { padding: 4px !important; }
-            #performance-chart { height: calc(100vh - 196px) !important; height: calc(100dvh - 196px) !important; min-height: 180px !important; }
+            /* 圖表本體：填滿卡片剩餘空間 */
+            #performance-chart { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; }
 
-            /* 頁尾縮扁 */
-            footer { padding: 3px 10px !important; }
+            /* 頁尾在橫向時隱藏，把空間全留給圖表 */
+            footer { display: none !important; }
         }
     </style>
 </head>
