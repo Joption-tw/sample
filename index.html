@@ -92,6 +92,25 @@
         @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         .live-indicator { animation: pulse-soft 2s infinite; }
 
+        /* 個別 Y 軸縮放控制（只在手機顯示，桌機用原本的垂直拉霸） */
+        #y-zoom-mobile { display: none; }
+        #refresh-btn, button[onclick="takeScreenshot()"] { touch-action: manipulation; }
+
+        @media (max-width: 767px), (orientation: landscape) and (max-height: 600px) {
+            #y-zoom-mobile {
+                display: flex !important; align-items: center; justify-content: center;
+                flex-wrap: wrap; gap: 5px; padding: 2px 4px; width: 100%;
+            }
+            #y-zoom-mobile .yz-chip { display: flex; align-items: center; gap: 3px;
+                background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 7px; padding: 2px 3px; flex: 0 0 auto; }
+            #y-zoom-mobile .yz-chip > span { font-size: 10px; font-weight: 900; line-height: 1; white-space: nowrap; }
+            #y-zoom-mobile button { width: 24px; height: 24px; border-radius: 5px; background: #fff;
+                border: 1px solid #cbd5e1; font-size: 15px; font-weight: 900; line-height: 1; color: #334155;
+                display: flex; align-items: center; justify-content: center; padding: 0; touch-action: manipulation; }
+            #y-zoom-mobile button:active { background: #e2e8f0; transform: scale(0.92); }
+            #y-zoom-mobile .yz-reset { font-size: 13px; color: #64748b; }
+        }
+
         /* ===== 手機橫向（打橫）：資料填滿整個可視畫面，完全不捲動、不被瀏覽器列遮住 ===== */
         @media (orientation: landscape) and (max-height: 600px) {
             html, body { height: 100%; overflow: hidden !important; }
@@ -118,9 +137,12 @@
             header h1 { font-size: 0.85rem !important; line-height: 1.05 !important; margin: 0 !important; }
             header > div:nth-child(2) > div { display: none !important; }   /* 隱藏 示範帳戶/版本/LIVE 那一列 */
             header > div:last-child { flex: 0 0 auto !important; width: auto !important; }
-            .flex.flex-row.sm\:flex-col { flex-direction: row !important; gap: 4px !important; min-width: 0 !important; width: auto !important; }
-            header #refresh-btn, header button[onclick="takeScreenshot()"] { padding: 2px 7px !important; font-size: 9px !important; }
-            header #refresh-btn i, header button[onclick="takeScreenshot()"] i { width: 11px !important; height: 11px !important; }
+            .flex.flex-row.sm\:flex-col { flex-direction: row !important; gap: 6px !important; min-width: 0 !important; width: auto !important; }
+            /* 截圖分享 / 同步數據：加大觸控範圍，好按 */
+            header #refresh-btn, header button[onclick="takeScreenshot()"] {
+                padding: 6px 12px !important; font-size: 10px !important; min-height: 30px !important;
+                border-radius: 8px !important; gap: 4px !important; }
+            header #refresh-btn i, header button[onclick="takeScreenshot()"] i { width: 13px !important; height: 13px !important; }
 
             /* 七張統計卡一整排：壓到最扁，數字為主 */
             [class*="lg:grid-cols-7"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: 3px !important; }
@@ -144,7 +166,16 @@
                                 justify-content: space-between !important; align-items: center !important;
                                 margin-bottom: 3px !important; gap: 8px !important; }
             #ui-axis-controls > div > span.uppercase { display: none !important; }
+            /* 左右軸切換群組：改為內容寬度，把中間空間讓給 Y 軸縮放列 */
+            #ui-axis-controls > div:first-child, #ui-axis-controls > div:last-child {
+                width: auto !important; flex: 0 0 auto !important; }
             #dynamic-legend { display: none !important; }
+
+            /* 個別 Y 軸縮放：橫向時擠成單行、填滿中間空白處 */
+            #y-zoom-mobile { flex: 1 1 auto !important; width: auto !important;
+                             flex-wrap: nowrap !important; overflow-x: auto !important; padding: 0 4px !important; }
+            #y-zoom-mobile .yz-chip > span { font-size: 9px !important; }
+            #y-zoom-mobile button { width: 22px !important; height: 22px !important; font-size: 14px !important; }
 
             /* 圖表本體：填滿卡片剩餘空間 */
             #performance-chart { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; }
@@ -250,6 +281,7 @@
                     </div>
                 </div>
                 <div id="dynamic-legend" class="flex flex-wrap justify-center items-center gap-3 sm:gap-4 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 min-h-[40px]"></div>
+                <div id="y-zoom-mobile"></div>
                 <div class="flex flex-col gap-1 w-full lg:w-auto items-center lg:items-end">
                     <span class="text-[9px] font-black text-slate-400 uppercase mr-1">右軸顯示</span>
                     <div class="mode-toggle">
@@ -630,6 +662,40 @@
             updateChartUI();
         }
 
+        // 個別 Y 軸縮放：dz 為 dataZoom 索引（1=期指, 2=總點, 3=獲利率, 4=時間價值）
+        // dir: 'in' 放大該軸（線條變高/更明顯）、'out' 縮小
+        function yZoom(dz, dir) {
+            if (!myChart) return;
+            const comp = (myChart.getOption().dataZoom || [])[dz] || {};
+            let s = (comp.start == null ? 0 : comp.start);
+            let e = (comp.end == null ? 100 : comp.end);
+            const center = (s + e) / 2;
+            let half = (e - s) / 2;
+            half = dir === 'in' ? half * 0.75 : half * 1.33;
+            half = Math.max(1.5, Math.min(50, half));
+            myChart.dispatchAction({ type: 'dataZoom', dataZoomIndex: dz,
+                start: Math.max(0, center - half), end: Math.min(100, center + half) });
+        }
+        function resetYZoom() {
+            if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
+        }
+        function buildYZoomBar() {
+            const bar = document.getElementById('y-zoom-mobile');
+            if (!bar) return;
+            const meta = [
+                { on: axisState.lIdx, dz: 1, label: '期指',   color: '#2563eb' },
+                { on: axisState.lTot, dz: 2, label: '總點',   color: '#475569' },
+                { on: axisState.rPrf, dz: 3, label: '獲利率', color: '#e11d48' },
+                { on: axisState.rTmv, dz: 4, label: '時間價值', color: '#9333ea' }
+            ].filter(m => m.on);
+            if (!meta.length) { bar.innerHTML = ''; return; }
+            bar.innerHTML = meta.map(m =>
+                `<div class="yz-chip"><span style="color:${m.color}">${m.label}</span>` +
+                `<button type="button" onclick="yZoom(${m.dz},'out')" aria-label="${m.label} 縮小">－</button>` +
+                `<button type="button" onclick="yZoom(${m.dz},'in')" aria-label="${m.label} 放大">＋</button></div>`
+            ).join('') + `<button type="button" class="yz-reset" onclick="resetYZoom()" aria-label="重設縮放">⟲</button>`;
+        }
+
         function updateChartUI() {
             if (!myChart || !globalData) return;
             // 手機（含打橫的手機：寬度雖大但高度很矮）都視為 mobile
@@ -647,6 +713,7 @@
             if (axisState.rTmv) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span><span class="text-[10px] font-black text-slate-700 text-xs">週三</span></div><div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span><span class="text-[10px] font-black text-slate-700 text-xs">週五</span></div>`;
             if (legendHtml === '') legendHtml = '<span class="text-[11px] text-slate-400">請選取顯示數據項目</span>';
             container.innerHTML = legendHtml;
+            buildYZoomBar();
             const leftAxesCount = (axisState.lIdx ? 1 : 0) + (axisState.lTot ? 1 : 0);
             const rightAxesCount = (axisState.rPrf ? 1 : 0) + (axisState.rTmv ? 1 : 0);
             const getMarkPoint = (name, type) => {
@@ -661,7 +728,7 @@
                 { name: '期指', data: axisState.lIdx ? globalData.yPrice : [], markPoint: axisState.lIdx ? getMarkPoint('期指', 'idx') : { data: [] } },
                 { name: '總點數', data: axisState.lTot ? globalData.yTotal : [], markPoint: axisState.lTot ? getMarkPoint('總點數', 'val') : { data: [] } }
             ];
-            const axOffset = isMobile ? 30 : 50;
+            const axOffset = isMobile ? 40 : 50;
             const yAxes = [
                 { type: 'value', name: '期指', position: 'left', offset: 0, show: axisState.lIdx, axisLabel: { color: '#2563eb', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, min: 'dataMin', max: 'dataMax', scale: true },
                 { type: 'value', name: '總點', position: 'left', offset: axisState.lIdx ? axOffset : 0, show: axisState.lTot, axisLabel: { color: '#475569', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: 0, max: 5000 },
@@ -680,8 +747,8 @@
                 { type: 'slider', yAxisIndex: 3, right: axisState.rPrf ? 40 : 0, width: 18, show: showYSlider && axisState.rTmv },
                 { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile }
             ];
-            const gridL = isMobile ? (leftAxesCount * 34 + 6)  : (leftAxesCount * 55 + 15);
-            const gridR = isMobile ? (rightAxesCount * 34 + 6) : (rightAxesCount * 55 + 15);
+            const gridL = isMobile ? (leftAxesCount * 42 + 4)  : (leftAxesCount * 55 + 15);
+            const gridR = isMobile ? (rightAxesCount * 42 + 4) : (rightAxesCount * 55 + 15);
             myChart.setOption({ textStyle: { fontFamily: 'Arial' }, grid: { left: gridL, right: gridR, top: isMobile ? 14 : '8%', bottom: isMobile ? 28 : '15%' }, yAxis: yAxes, dataZoom: dZoom, series: seriesConfig.map(s => ({ name: s.name, data: s.data, markPoint: s.markPoint })) });
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
         }
