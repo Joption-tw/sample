@@ -88,6 +88,7 @@
         .mode-btn.active.l-tot { background: #475569; color: white; }
         .mode-btn.active.r-prf { background: #e11d48; color: white; }
         .mode-btn.active.r-tmv { background: #9333ea; color: white; }
+        .mode-btn.active.r-vix { background: #f59e0b; color: white; }
 
         @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         .live-indicator { animation: pulse-soft 2s infinite; }
@@ -248,7 +249,7 @@
         </header>
 
         <!-- 統計數據卡片 -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 sm:gap-2 text-center">
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 sm:gap-2 text-center">
             <div class="glass-card py-1.5 px-2 border-l-4 border-l-blue-500 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]">
                 <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">百點震幅</p>
                 <p id="stat-swing" class="text-base sm:text-lg font-black stat-value text-slate-800 leading-none">--</p>
@@ -279,6 +280,11 @@
                 <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">出場時間點</p>
                 <p id="stat-exit" class="text-sm sm:text-base font-black stat-value text-slate-600 leading-none">--</p>
             </div>
+            <div class="glass-card py-1.5 px-2 border-l-4 border-l-amber-400 flex flex-col justify-center min-h-[48px] sm:min-h-[50px]" title="臺指選擇權波動率指數（期交所，僅日盤）">
+                <p class="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase leading-tight">VIX <span id="vix-day" class="normal-case"></span></p>
+                <p id="vix-last" class="text-base sm:text-lg font-black stat-value text-amber-600 leading-none">--</p>
+                <p id="vix-chg" class="text-[9px] sm:text-[10px] font-bold leading-none mt-0.5 text-slate-400"></p>
+            </div>
         </div>
 
         <div class="glass-card p-1 sm:p-1.5" id="ui-switcher-container">
@@ -308,30 +314,12 @@
                     <div class="mode-toggle">
                         <div id="btn-r-prf" class="mode-btn flex-1 text-center active r-prf" onclick="toggleAxis('rPrf')">獲利率</div>
                         <div id="btn-r-tmv" class="mode-btn flex-1 text-center active r-tmv" onclick="toggleAxis('rTmv')">時間價值</div>
+                        <div id="btn-r-vix" class="mode-btn flex-1 text-center active r-vix" onclick="toggleAxis('rVix')">VIX</div>
                     </div>
                 </div>
             </div>
 
             <div id="performance-chart"></div>
-        </div>
-
-        <!-- 臺指選擇權波動率指數 VIX（日盤即時） -->
-        <div class="glass-card p-2 md:p-4" id="vix-card">
-            <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-2 px-1">
-                <div>
-                    <h2 class="text-base sm:text-lg font-black text-slate-800 leading-tight">臺指選擇權波動率指數 VIX</h2>
-                    <p id="vix-status" class="text-[10px] sm:text-[11px] font-bold text-slate-400">載入中…</p>
-                </div>
-                <div class="grid grid-cols-5 gap-1.5 text-center">
-                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">最新</p><p id="vix-last" class="text-base sm:text-xl font-black stat-value text-slate-800 leading-none">--</p></div>
-                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">漲跌</p><p id="vix-chg" class="text-sm sm:text-base font-black stat-value text-slate-500 leading-none">--</p></div>
-                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">開盤</p><p id="vix-open" class="text-sm sm:text-base font-black stat-value text-slate-600 leading-none">--</p></div>
-                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">最高</p><p id="vix-high" class="text-sm sm:text-base font-black stat-value text-slate-600 leading-none">--</p></div>
-                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">最低</p><p id="vix-low" class="text-sm sm:text-base font-black stat-value text-slate-600 leading-none">--</p></div>
-                </div>
-            </div>
-            <div id="vix-chart" style="width:100%;height:260px"></div>
-            <p class="text-[9px] text-slate-400 px-1">資料來源：臺灣期貨交易所（僅日盤 09:00～13:45，盤中每 15 秒更新；虛線為前一日收盤）</p>
         </div>
 
         <!-- 頁尾版本資訊 -->
@@ -376,16 +364,17 @@
         let myChart = null;
         let globalData = null;
         let currentSessionIdx = -1;
-        let axisState = { lIdx: false, lTot: true, rPrf: true, rTmv: true };
+        let axisState = { lIdx: false, lTot: true, rPrf: true, rTmv: true, rVix: true };
 
         // 每個 Y 軸可鎖定一條線，讓「該線」在圖上撐滿（最大值→95%、最小值→5%）
-        // yAxisIndex: 0=期指, 1=總點數, 2=獲利率, 3=時間價值(週三/週五共用)
+        // yAxisIndex: 0=期指, 1=總點數, 2=獲利率, 3=時間價值(週三/週五共用), 4=VIX
         const AXIS_SERIES = {
             0: [{ key: 'idx', label: '期指',   arr: 'yPrice',   on: () => axisState.lIdx, color: '#2563eb' }],
             1: [{ key: 'tot', label: '總點',   arr: 'yTotal',   on: () => axisState.lTot, color: '#475569' }],
             2: [{ key: 'prf', label: '獲利率', arr: 'yProfit',  on: () => axisState.rPrf, color: '#e11d48' }],
             3: [{ key: 'wed', label: '週三',   arr: 'yTimeWed', on: () => axisState.rTmv, color: '#ef4444' },
-                { key: 'fri', label: '週五',   arr: 'yTimeFri', on: () => axisState.rTmv, color: '#10b981' }]
+                { key: 'fri', label: '週五',   arr: 'yTimeFri', on: () => axisState.rTmv, color: '#10b981' }],
+            4: [{ key: 'vix', label: 'VIX',    arr: 'yVix',     on: () => axisState.rVix, color: '#f59e0b' }]
         };
         let yFrameLock = {};      // 手機用：{ 3: 'wed' } 代表時間價值軸目前鎖定框選「週三」那條線
 
@@ -679,6 +668,7 @@
                     raw[key] = applySmoothing(cleaned);
                 });
                 globalData = raw;
+                globalData.yVix = buildVixSeries();
                 const checkAndInit = () => {
                     if (typeof echarts !== 'undefined') {
                         initChart(globalData);
@@ -761,17 +751,19 @@
             document.getElementById('btn-l-tot').className = `mode-btn l-tot ${axisState.lTot ? 'active' : ''}`;
             document.getElementById('btn-r-prf').className = `mode-btn r-prf ${axisState.rPrf ? 'active' : ''}`;
             document.getElementById('btn-r-tmv').className = `mode-btn r-tmv ${axisState.rTmv ? 'active' : ''}`;
+            document.getElementById('btn-r-vix').className = `mode-btn r-vix ${axisState.rVix ? 'active' : ''}`;
             const container = document.getElementById('dynamic-legend');
             let legendHtml = '';
             if (axisState.lIdx) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span><span class="text-[10px] font-black text-slate-700">期指</span></div>`;
             if (axisState.lTot) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-slate-700"></span><span class="text-[10px] font-black text-slate-700">總點數</span></div>`;
             if (axisState.rPrf) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span><span class="text-[10px] font-black text-slate-700">獲利率</span></div>`;
             if (axisState.rTmv) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span><span class="text-[10px] font-black text-slate-700 text-xs">週三</span></div><div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span><span class="text-[10px] font-black text-slate-700 text-xs">週五</span></div>`;
+            if (axisState.rVix) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span><span class="text-[10px] font-black text-slate-700">VIX</span></div>`;
             if (legendHtml === '') legendHtml = '<span class="text-[11px] text-slate-400">請選取顯示數據項目</span>';
             container.innerHTML = legendHtml;
             buildYZoomBar();
             const leftAxesCount = (axisState.lIdx ? 1 : 0) + (axisState.lTot ? 1 : 0);
-            const rightAxesCount = (axisState.rPrf ? 1 : 0) + (axisState.rTmv ? 1 : 0);
+            const rightAxesCount = (axisState.rPrf ? 1 : 0) + (axisState.rTmv ? 1 : 0) + (axisState.rVix ? 1 : 0);
             const getMarkPoint = (name, type) => {
                 if (type === 'profit') return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10, fontWeight: 'bold' }, data: [{ type: 'max', label: { color: '#22d3ee', position: 'top', formatter: '{c}%', offset: [0, -5] } }, { type: 'min', label: { color: '#ec4899', position: 'bottom', formatter: '{c}%', offset: [0, 5] } }] };
                 if (name === '期指') return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10, fontWeight: 'bold' }, data: [{ type: 'max', label: { color: '#ef4444', position: 'top', formatter: (p) => Math.round(p.value).toLocaleString() } }, { type: 'min', label: { color: '#10b981', position: 'bottom', formatter: (p) => Math.round(p.value).toLocaleString() } }] };
@@ -782,14 +774,16 @@
                 { name: '週三時價', data: axisState.rTmv ? globalData.yTimeWed : [], markPoint: axisState.rTmv ? getMarkPoint('週三時價', 'val') : { data: [] } },
                 { name: '週五時價', data: axisState.rTmv ? globalData.yTimeFri : [], markPoint: axisState.rTmv ? getMarkPoint('週五時價', 'val') : { data: [] } },
                 { name: '期指', data: axisState.lIdx ? globalData.yPrice : [], markPoint: axisState.lIdx ? getMarkPoint('期指', 'idx') : { data: [] } },
-                { name: '總點數', data: axisState.lTot ? globalData.yTotal : [], markPoint: axisState.lTot ? getMarkPoint('總點數', 'val') : { data: [] } }
+                { name: '總點數', data: axisState.lTot ? globalData.yTotal : [], markPoint: axisState.lTot ? getMarkPoint('總點數', 'val') : { data: [] } },
+                { name: 'VIX', data: axisState.rVix ? globalData.yVix : [], markPoint: { data: [] } }
             ];
             const axOffset = isMobile ? 40 : 50;
             const yAxes = [
                 { type: 'value', name: '期指', position: 'left', offset: 0, show: axisState.lIdx, axisLabel: { color: '#2563eb', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } }, min: 'dataMin', max: 'dataMax', scale: true },
                 { type: 'value', name: '總點', position: 'left', offset: axisState.lIdx ? axOffset : 0, show: axisState.lTot, axisLabel: { color: '#475569', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: 0, max: 5000 },
                 { type: 'value', name: '獲利%', position: 'right', offset: 0, show: axisState.rPrf, axisLabel: { color: '#e11d48', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false }, min: -1, max: 5 },
-                { type: 'value', name: '時價', position: 'right', offset: axisState.rPrf ? axOffset : 0, show: axisState.rTmv, axisLabel: { color: '#9333ea', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false } }
+                { type: 'value', name: '時價', position: 'right', offset: axisState.rPrf ? axOffset : 0, show: axisState.rTmv, axisLabel: { color: '#9333ea', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial' }, splitLine: { show: false } },
+                { type: 'value', name: 'VIX', position: 'right', offset: ((axisState.rPrf ? 1 : 0) + (axisState.rTmv ? 1 : 0)) * axOffset, show: axisState.rVix, axisLabel: { color: '#d97706', fontWeight: 'bold', fontSize: 10, fontFamily: 'Arial', formatter: v => (+v).toFixed(1) }, splitLine: { show: false }, scale: true }
             ];
             // 左右四條垂直拉霸全部拿掉（電腦/手機都很難用），改用下方「每條線一顆藥丸鈕」點一下放到最大；
             // 只留底部時間軸滑桿，並在手機加大觸控範圍
@@ -876,7 +870,7 @@
             //    預設：用該軸「所有啟用線」的合併範圍
             //    若某軸有被點選鎖定某條線（例如時間價值軸點了「週三」）：只框那條線，讓它完整撐滿
             const curY = myChart.getOption().yAxis.map(a => Object.assign({}, a));
-            [0, 1, 2, 3].forEach(ai => {
+            [0, 1, 2, 3, 4].forEach(ai => {
                 const ser = AXIS_SERIES[ai].filter(s => s.on());
                 if (!ser.length) return;                       // 該軸沒顯示，不動
                 const lockKey = yFrameLock[ai];
@@ -912,12 +906,12 @@
                     formatter: function(params) {
                         let res = `<div class="font-bold mb-1">${params[0].axisValue}</div>`;
                         let hasVal = false;
-                        params.forEach(p => { if (p.value === null || p.value === undefined || (Array.isArray(p.data) && p.data.length === 0)) return; let val = p.value; if (p.seriesName === '獲利率') val = val.toFixed(2) + '%'; else val = Math.round(val).toLocaleString(); res += `<div class="flex justify-between gap-4 mt-0.5"><span>${p.marker} ${p.seriesName}</span><span class="font-bold">${val}</span></div>`; hasVal = true; });
+                        params.forEach(p => { if (p.value === null || p.value === undefined || (Array.isArray(p.data) && p.data.length === 0)) return; let val = p.value; if (p.seriesName === '獲利率') val = val.toFixed(2) + '%'; else if (p.seriesName === 'VIX') val = val.toFixed(2); else val = Math.round(val).toLocaleString(); res += `<div class="flex justify-between gap-4 mt-0.5"><span>${p.marker} ${p.seriesName}</span><span class="font-bold">${val}</span></div>`; hasVal = true; });
                         return hasVal ? res : "";
                     }
                 },
                 xAxis: { type: 'category', data: data.x, boundaryGap: false, axisLabel: { color: '#94a3b8', fontSize: 10, rotate: 30, fontFamily: 'Arial' }, axisLine: { lineStyle: { color: '#f1f5f9' } } },
-                yAxis: [ { type: 'value', name: '期指', position: 'left' }, { type: 'value', name: '總點', position: 'left' }, { type: 'value', name: '獲利%', position: 'right' }, { type: 'value', name: '時價', position: 'right' } ],
+                yAxis: [ { type: 'value', name: '期指', position: 'left' }, { type: 'value', name: '總點', position: 'left' }, { type: 'value', name: '獲利%', position: 'right' }, { type: 'value', name: '時價', position: 'right' }, { type: 'value', name: 'VIX', position: 'right' } ],
                 dataZoom: [ { type: 'slider', xAxisIndex: 0 }, { type: 'slider', yAxisIndex: 0, show: false }, { type: 'slider', yAxisIndex: 1, show: false }, { type: 'slider', yAxisIndex: 2, show: false }, { type: 'slider', yAxisIndex: 3, show: false }, { type: 'inside', xAxisIndex: 0 } ],
                 series: [
                     { type: 'line', data: [], markArea: { silent: true, data: markAreas }, silent: true },
@@ -925,7 +919,8 @@
                     { name: '週三時價', type: 'line', yAxisIndex: 3, data: data.yTimeWed, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#ef4444', shadowBlur: 3 }, z: 4 },
                     { name: '週五時價', type: 'line', yAxisIndex: 3, data: data.yTimeFri, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#10b981', shadowBlur: 3 }, z: 4 },
                     { name: '期指', type: 'line', yAxisIndex: 0, data: data.yPrice, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#2563eb', shadowBlur: 3 }, z: 5 },
-                    { name: '總點數', type: 'line', yAxisIndex: 1, data: data.yTotal, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#334155', shadowBlur: 3 }, z: 5 }
+                    { name: '總點數', type: 'line', yAxisIndex: 1, data: data.yTotal, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#334155', shadowBlur: 3 }, z: 5 },
+                    { name: 'VIX', type: 'line', yAxisIndex: 4, data: data.yVix, smooth: false, showSymbol: false, connectNulls: false, lineStyle: { width: 2, color: '#f59e0b' }, itemStyle: { color: '#f59e0b' }, z: 6 }
                 ]
             };
             myChart.setOption(opt);
@@ -983,101 +978,111 @@
             } catch (e) { /* 靜默失敗 */ }
         }
 
-        // ===== 臺指選擇權波動率指數 VIX（期交所日盤即時）=====
+        // ===== 臺指選擇權波動率指數 VIX（期交所，僅日盤）疊在績效圖上 =====
         const VIX_URL = location.hostname.includes('github.io')
             ? 'https://demo-performance.vercel.app/api/vix'
             : '/api/vix';
-        let vixChart = null;
+        const vixByDate = {};     // 'YYYYMMDD' → { 分鐘數: 該分鐘第一筆 VIX }
+        let vixLive = null;
         let vixTimer = null;
 
-        function hhmmssToMin(s) {
-            s = String(s).padStart(6, '0');
-            return +s.slice(0, 2) * 60 + +s.slice(2, 4) + +s.slice(4, 6) / 60;
-        }
+        function twNow() { return new Date(Date.now() + (480 + new Date().getTimezoneOffset()) * 60000); }
+        function ymd(d) { return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; }
 
         // 台灣時間是否為日盤（週一～五 08:45～13:50，含收盤後緩衝）
         function isVixSession() {
-            const tw = new Date(Date.now() + (480 + new Date().getTimezoneOffset()) * 60000);
-            const d = tw.getDay(), m = tw.getHours() * 60 + tw.getMinutes();
+            const tw = twNow(), d = tw.getDay(), m = tw.getHours() * 60 + tw.getMinutes();
             return d >= 1 && d <= 5 && m >= 525 && m <= 830;
         }
 
-        function renderVix(v) {
-            const q = v.quote || {};
-            const fx = x => (x == null ? '--' : x.toFixed(2));
-            document.getElementById('vix-last').innerText = fx(q.last);
-            document.getElementById('vix-open').innerText = fx(q.open);
-            document.getElementById('vix-high').innerText = fx(q.high);
-            document.getElementById('vix-low').innerText = fx(q.low);
-            const chgEl = document.getElementById('vix-chg');
-            if (q.last != null && q.ref) {
-                const c = q.last - q.ref;
-                chgEl.innerText = `${c >= 0 ? '▲' : '▼'}${Math.abs(c).toFixed(2)} (${(c / q.ref * 100).toFixed(1)}%)`;
-                chgEl.className = `text-sm sm:text-base font-black stat-value leading-none ${c > 0 ? 'text-rose-600' : c < 0 ? 'text-emerald-600' : 'text-slate-500'}`;
-            } else chgEl.innerText = '--';
-
-            const td = v.tradeDay || '';
-            const dayLabel = td ? `${td.slice(0, 4)}/${td.slice(4, 6)}/${td.slice(6)}` : '';
-            const t = (q.time || '').split(' ')[1] || '';
-            document.getElementById('vix-status').innerText =
-                `交易日 ${dayLabel}　最後更新 ${t}　${isVixSession() ? '● 盤中即時' : '（已收盤）'}`;
-
-            const pts = (v.ticks || []).map(([hms, val]) => [hhmmssToMin(hms), val]);
-            const vals = pts.map(p => p[1]).concat(q.ref != null ? [q.ref] : []);
-            const lo = Math.min(...vals), hi = Math.max(...vals), pad = Math.max(0.2, (hi - lo) * 0.1);
-            const fmtM = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.round(m % 60)).padStart(2, '0')}`;
-
-            if (!vixChart) {
-                vixChart = echarts.init(document.getElementById('vix-chart'));
-                window.addEventListener('resize', () => vixChart && vixChart.resize());
-            }
-            vixChart.setOption({
-                animation: false,
-                grid: { left: 44, right: 16, top: 16, bottom: 28 },
-                tooltip: {
-                    trigger: 'axis',
-                    formatter: ps => {
-                        const p = ps[0]; if (!p) return '';
-                        const val = p.value[1], diff = q.ref != null ? val - q.ref : null;
-                        return `<b>${fmtM(p.value[0])}</b><br/>VIX：<b>${val.toFixed(2)}</b>` +
-                            (diff != null ? `<br/>較前日收盤：${diff >= 0 ? '+' : ''}${diff.toFixed(2)}` : '');
-                    }
-                },
-                xAxis: {
-                    type: 'value', min: 540, max: 825, interval: 30,
-                    axisLabel: { formatter: fmtM, color: '#94a3b8', fontSize: 10 },
-                    splitLine: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }
-                },
-                yAxis: {
-                    type: 'value', scale: true,
-                    min: +(lo - pad).toFixed(1), max: +(hi + pad).toFixed(1),
-                    axisLabel: { color: '#94a3b8', fontSize: 10 },
-                    splitLine: { lineStyle: { color: '#f1f5f9' } }
-                },
-                series: [{
-                    name: 'VIX', type: 'line', data: pts, showSymbol: false, smooth: false,
-                    lineStyle: { width: 2, color: '#7c3aed' }, itemStyle: { color: '#7c3aed' },
-                    areaStyle: { color: 'rgba(124,58,237,0.06)' },
-                    markLine: q.ref == null ? undefined : {
-                        symbol: 'none', silent: true,
-                        lineStyle: { type: 'dashed', color: '#f97316', width: 1.5 },
-                        label: { formatter: `前收 ${q.ref.toFixed(2)}`, color: '#f97316', fontSize: 10, position: 'insideEndTop' },
-                        data: [{ yAxis: q.ref }]
-                    }
-                }]
-            }, true);
+        // 各早盤對應的日期：本週期從最近一個週三 15:00（周三晚）起算
+        const DAY_SESSION_OFFSET = { 1: 1, 3: 2, 5: 5, 7: 6, 9: 7 };   // rowRanges index → 距週三天數
+        function daySessionDates() {
+            const now = twNow(), mins = now.getHours() * 60 + now.getMinutes();
+            let back = (now.getDay() - 3 + 7) % 7;
+            if (back === 0 && mins < 900) back = 7;
+            const out = {};
+            Object.entries(DAY_SESSION_OFFSET).forEach(([idx, off]) => {
+                out[idx] = ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - back + off));
+            });
+            return out;
         }
 
-        async function fetchVix() {
+        function storeVixTicks(date, ticks) {
+            const map = {};
+            (ticks || []).forEach(([hms, v]) => {
+                const s = String(hms).padStart(6, '0'), m = +s.slice(0, 2) * 60 + +s.slice(2, 4);
+                if (!(m in map)) map[m] = v;
+            });
+            vixByDate[date] = map;
+        }
+
+        // 依 globalData.x 的時間標籤對齊 VIX，夜盤與 09:00 前為 null
+        function buildVixSeries() {
+            if (!globalData) return [];
+            const arr = new Array(globalData.x.length).fill(null);
+            Object.entries(daySessionDates()).forEach(([idx, date]) => {
+                const map = vixByDate[date], r = rowRanges[idx];
+                if (!map) return;
+                for (let i = r.start - 2; i <= Math.min(r.end - 2, globalData.x.length - 1); i++) {
+                    const t = parseTimeMins(globalData.x[i]);
+                    if (t !== null && map[t] !== undefined) arr[i] = map[t];
+                }
+            });
+            return arr;
+        }
+
+        function renderVixTile() {
+            const q = vixLive && vixLive.quote;
+            if (!q || q.last == null) return;
+            const td = vixLive.tradeDay || '';
+            document.getElementById('vix-day').innerText = td ? `${+td.slice(4, 6)}/${+td.slice(6)}` : '';
+            document.getElementById('vix-last').innerText = q.last.toFixed(2);
+            const el = document.getElementById('vix-chg');
+            if (!q.ref) { el.innerText = ''; return; }
+            const c = q.last - q.ref, sign = c >= 0 ? '+' : '';
+            el.innerText = `${sign}${c.toFixed(2)}（${sign}${(c / q.ref * 100).toFixed(2)}%）`;
+            el.className = `text-[9px] sm:text-[10px] font-bold leading-none mt-0.5 ${c >= 0 ? 'text-rose-500' : 'text-emerald-500'}`;
+        }
+
+        // full=true：重畫並套用目前盤別（首次載入）；false：只換 VIX 線與 VIX 軸範圍，不動使用者的縮放
+        function applyVixToChart(full) {
+            if (!globalData || !myChart) return;
+            globalData.yVix = buildVixSeries();
+            if (full) { updateChartUI(); return; }
+            myChart.setOption({ series: [{ name: 'VIX', data: axisState.rVix ? globalData.yVix : [] }] });
+            if (currentSessionIdx === -1 || !axisState.rVix) return;
+            const r = rowRanges[currentSessionIdx];
+            const f = fitRange(globalData.yVix.slice(r.start - 2, r.end - 1));
+            if (!f) return;
+            const curY = myChart.getOption().yAxis.map(a => Object.assign({}, a));
+            curY[4].min = f.min; curY[4].max = f.max;
+            myChart.setOption({ yAxis: curY });
+        }
+
+        async function getVixJSON(query) {
+            const res = await fetch(`${VIX_URL}?${query}t=${Date.now()}`);
+            if (!res.ok) throw new Error(res.status);
+            return res.json();
+        }
+
+        async function loadVix(full = true) {
             try {
-                const res = await fetch(`${VIX_URL}?t=${Date.now()}`);
-                if (!res.ok) throw new Error(res.status);
-                renderVix(await res.json());
-            } catch (e) {
-                document.getElementById('vix-status').innerText = 'VIX 資料暫時無法取得，稍後自動重試';
-            }
+                vixLive = await getVixJSON('');
+                if (vixLive.tradeDay) storeVixTicks(vixLive.tradeDay, vixLive.ticks);
+                if (full) {
+                    // 本週期過去的早盤：抓期交所歷史資料（每日只抓一次）
+                    const today = ymd(twNow());
+                    const need = [...new Set(Object.values(daySessionDates()))]
+                        .filter(d => d < today && !(d in vixByDate));
+                    await Promise.all(need.map(d => getVixJSON(`date=${d}&`)
+                        .then(v => storeVixTicks(d, v.ticks)).catch(() => {})));
+                }
+                renderVixTile();
+                applyVixToChart(full);
+            } catch (e) { console.warn('VIX 資料暫時無法取得', e); }
             clearTimeout(vixTimer);
-            vixTimer = setTimeout(fetchVix, isVixSession() ? 15000 : 300000);
+            vixTimer = setTimeout(() => loadVix(false), isVixSession() ? 15000 : 300000);
         }
 
         window.onload = () => {
@@ -1085,8 +1090,8 @@
             fetchData();
             fetchVersionInfo();
             fetchVisits();
-            fetchVix();
-            document.getElementById('refresh-btn').onclick = () => { fetchData(); fetchVix(); };
+            loadVix();
+            document.getElementById('refresh-btn').onclick = () => { fetchData(); loadVix(); };
             window.addEventListener('resize', () => { if(myChart) myChart.resize(); updateChartUI(); });
         };
     </script>
