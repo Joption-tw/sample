@@ -315,6 +315,25 @@
             <div id="performance-chart"></div>
         </div>
 
+        <!-- 臺指選擇權波動率指數 VIX（日盤即時） -->
+        <div class="glass-card p-2 md:p-4" id="vix-card">
+            <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-2 px-1">
+                <div>
+                    <h2 class="text-base sm:text-lg font-black text-slate-800 leading-tight">臺指選擇權波動率指數 VIX</h2>
+                    <p id="vix-status" class="text-[10px] sm:text-[11px] font-bold text-slate-400">載入中…</p>
+                </div>
+                <div class="grid grid-cols-5 gap-1.5 text-center">
+                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">最新</p><p id="vix-last" class="text-base sm:text-xl font-black stat-value text-slate-800 leading-none">--</p></div>
+                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">漲跌</p><p id="vix-chg" class="text-sm sm:text-base font-black stat-value text-slate-500 leading-none">--</p></div>
+                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">開盤</p><p id="vix-open" class="text-sm sm:text-base font-black stat-value text-slate-600 leading-none">--</p></div>
+                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">最高</p><p id="vix-high" class="text-sm sm:text-base font-black stat-value text-slate-600 leading-none">--</p></div>
+                    <div class="px-2"><p class="text-[8px] sm:text-[9px] font-black text-slate-400">最低</p><p id="vix-low" class="text-sm sm:text-base font-black stat-value text-slate-600 leading-none">--</p></div>
+                </div>
+            </div>
+            <div id="vix-chart" style="width:100%;height:260px"></div>
+            <p class="text-[9px] text-slate-400 px-1">資料來源：臺灣期貨交易所（僅日盤 09:00～13:45，盤中每 15 秒更新；虛線為前一日收盤）</p>
+        </div>
+
         <!-- 頁尾版本資訊 -->
         <footer class="glass-card px-4 py-2 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div class="flex flex-col items-center sm:items-start gap-0.5">
@@ -964,12 +983,110 @@
             } catch (e) { /* 靜默失敗 */ }
         }
 
+        // ===== 臺指選擇權波動率指數 VIX（期交所日盤即時）=====
+        const VIX_URL = location.hostname.includes('github.io')
+            ? 'https://demo-performance.vercel.app/api/vix'
+            : '/api/vix';
+        let vixChart = null;
+        let vixTimer = null;
+
+        function hhmmssToMin(s) {
+            s = String(s).padStart(6, '0');
+            return +s.slice(0, 2) * 60 + +s.slice(2, 4) + +s.slice(4, 6) / 60;
+        }
+
+        // 台灣時間是否為日盤（週一～五 08:45～13:50，含收盤後緩衝）
+        function isVixSession() {
+            const tw = new Date(Date.now() + (480 + new Date().getTimezoneOffset()) * 60000);
+            const d = tw.getDay(), m = tw.getHours() * 60 + tw.getMinutes();
+            return d >= 1 && d <= 5 && m >= 525 && m <= 830;
+        }
+
+        function renderVix(v) {
+            const q = v.quote || {};
+            const fx = x => (x == null ? '--' : x.toFixed(2));
+            document.getElementById('vix-last').innerText = fx(q.last);
+            document.getElementById('vix-open').innerText = fx(q.open);
+            document.getElementById('vix-high').innerText = fx(q.high);
+            document.getElementById('vix-low').innerText = fx(q.low);
+            const chgEl = document.getElementById('vix-chg');
+            if (q.last != null && q.ref) {
+                const c = q.last - q.ref;
+                chgEl.innerText = `${c >= 0 ? '▲' : '▼'}${Math.abs(c).toFixed(2)} (${(c / q.ref * 100).toFixed(1)}%)`;
+                chgEl.className = `text-sm sm:text-base font-black stat-value leading-none ${c > 0 ? 'text-rose-600' : c < 0 ? 'text-emerald-600' : 'text-slate-500'}`;
+            } else chgEl.innerText = '--';
+
+            const td = v.tradeDay || '';
+            const dayLabel = td ? `${td.slice(0, 4)}/${td.slice(4, 6)}/${td.slice(6)}` : '';
+            const t = (q.time || '').split(' ')[1] || '';
+            document.getElementById('vix-status').innerText =
+                `交易日 ${dayLabel}　最後更新 ${t}　${isVixSession() ? '● 盤中即時' : '（已收盤）'}`;
+
+            const pts = (v.ticks || []).map(([hms, val]) => [hhmmssToMin(hms), val]);
+            const vals = pts.map(p => p[1]).concat(q.ref != null ? [q.ref] : []);
+            const lo = Math.min(...vals), hi = Math.max(...vals), pad = Math.max(0.2, (hi - lo) * 0.1);
+            const fmtM = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.round(m % 60)).padStart(2, '0')}`;
+
+            if (!vixChart) {
+                vixChart = echarts.init(document.getElementById('vix-chart'));
+                window.addEventListener('resize', () => vixChart && vixChart.resize());
+            }
+            vixChart.setOption({
+                animation: false,
+                grid: { left: 44, right: 16, top: 16, bottom: 28 },
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: ps => {
+                        const p = ps[0]; if (!p) return '';
+                        const val = p.value[1], diff = q.ref != null ? val - q.ref : null;
+                        return `<b>${fmtM(p.value[0])}</b><br/>VIX：<b>${val.toFixed(2)}</b>` +
+                            (diff != null ? `<br/>較前日收盤：${diff >= 0 ? '+' : ''}${diff.toFixed(2)}` : '');
+                    }
+                },
+                xAxis: {
+                    type: 'value', min: 540, max: 825, interval: 30,
+                    axisLabel: { formatter: fmtM, color: '#94a3b8', fontSize: 10 },
+                    splitLine: { show: false }, axisLine: { lineStyle: { color: '#e2e8f0' } }
+                },
+                yAxis: {
+                    type: 'value', scale: true,
+                    min: +(lo - pad).toFixed(1), max: +(hi + pad).toFixed(1),
+                    axisLabel: { color: '#94a3b8', fontSize: 10 },
+                    splitLine: { lineStyle: { color: '#f1f5f9' } }
+                },
+                series: [{
+                    name: 'VIX', type: 'line', data: pts, showSymbol: false, smooth: false,
+                    lineStyle: { width: 2, color: '#7c3aed' }, itemStyle: { color: '#7c3aed' },
+                    areaStyle: { color: 'rgba(124,58,237,0.06)' },
+                    markLine: q.ref == null ? undefined : {
+                        symbol: 'none', silent: true,
+                        lineStyle: { type: 'dashed', color: '#f97316', width: 1.5 },
+                        label: { formatter: `前收 ${q.ref.toFixed(2)}`, color: '#f97316', fontSize: 10, position: 'insideEndTop' },
+                        data: [{ yAxis: q.ref }]
+                    }
+                }]
+            }, true);
+        }
+
+        async function fetchVix() {
+            try {
+                const res = await fetch(`${VIX_URL}?t=${Date.now()}`);
+                if (!res.ok) throw new Error(res.status);
+                renderVix(await res.json());
+            } catch (e) {
+                document.getElementById('vix-status').innerText = 'VIX 資料暫時無法取得，稍後自動重試';
+            }
+            clearTimeout(vixTimer);
+            vixTimer = setTimeout(fetchVix, isVixSession() ? 15000 : 300000);
+        }
+
         window.onload = () => {
             if (typeof lucide !== 'undefined') lucide.createIcons();
             fetchData();
             fetchVersionInfo();
             fetchVisits();
-            document.getElementById('refresh-btn').onclick = fetchData;
+            fetchVix();
+            document.getElementById('refresh-btn').onclick = () => { fetchData(); fetchVix(); };
             window.addEventListener('resize', () => { if(myChart) myChart.resize(); updateChartUI(); });
         };
     </script>
