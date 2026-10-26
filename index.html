@@ -920,7 +920,7 @@
                     { name: '週五時價', type: 'line', yAxisIndex: 3, data: data.yTimeFri, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#10b981', shadowBlur: 3 }, z: 4 },
                     { name: '期指', type: 'line', yAxisIndex: 0, data: data.yPrice, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#2563eb', shadowBlur: 3 }, z: 5 },
                     { name: '總點數', type: 'line', yAxisIndex: 1, data: data.yTotal, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#334155', shadowBlur: 3 }, z: 5 },
-                    { name: 'VIX', type: 'line', yAxisIndex: 4, data: data.yVix, smooth: false, showSymbol: false, connectNulls: false, lineStyle: { width: 2, color: '#f59e0b' }, itemStyle: { color: '#f59e0b' }, z: 6 }
+                    { name: 'VIX', type: 'line', yAxisIndex: 4, data: data.yVix, smooth: true, showSymbol: false, connectNulls: false, lineStyle: { width: 3.2, color: '#f59e0b', shadowBlur: 4, shadowColor: 'rgba(245, 158, 11, 0.35)' }, itemStyle: { color: '#f59e0b' }, z: 6 }
                 ]
             };
             myChart.setOption(opt);
