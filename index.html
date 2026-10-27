@@ -649,7 +649,8 @@
                         const p = rawNumeric(cols[22]);
                         raw.yPriceRaw.push(p);
                         raw.yPrice.push(p);
-                        raw.yProfit.push(rawNumeric(cols[26]));
+                        // 資產欄空白時，試算表會算出 -100% 獲利率，視為無資料
+                        raw.yProfit.push(rawNumeric(cols[8]) === null ? null : rawNumeric(cols[26]));
                         raw.yTimeWed.push(rawNumeric(cols[52]));
                         raw.yTimeFri.push(rawNumeric(cols[53]));
                         const totalPoint = rawNumeric(cols[12]);
