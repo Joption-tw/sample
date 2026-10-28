@@ -1,4 +1,4 @@
-name: 每週績效存檔
+name: 每週績效 + 每日 VIX 存檔
 
 # 試算表每週三 15:00（台灣時間）清空，所以：
 #   - 週三 13:50～14:55 每 10 分鐘存一次（週三早盤 13:45 收盤後，清空前）
@@ -14,6 +14,7 @@ on:
   push:
     paths:
       - 'scripts/archive-week.mjs'
+      - 'scripts/archive-vix.mjs'
       - '.github/workflows/archive-week.yml'
 
 permissions:
@@ -32,12 +33,13 @@ jobs:
         with:
           node-version: 20
       - run: node scripts/archive-week.mjs
+      - run: node scripts/archive-vix.mjs     # 每日 VIX（週一～五 13:55 那次即為當日完整走勢）
       - name: 有變動才 commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
           git add history
           if git diff --cached --quiet; then echo "無變動"; exit 0; fi
-          git commit -m "每週績效存檔 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+          git commit -m "績效 / VIX 存檔 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
           git pull --rebase
           git push

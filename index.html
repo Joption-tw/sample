@@ -1299,6 +1299,7 @@
         }
         function vixRef(date) {
             if (vixLive && vixLive.tradeDay === date && vixLive.quote && vixLive.quote.ref) return vixLive.quote.ref;
+            if (vixRefByDate[date]) return vixRefByDate[date];
             const prev = Object.keys(vixByDate).filter(d => d < date && vixClose(d) !== null).sort().pop();
             return prev ? vixClose(prev) : null;
         }
@@ -1312,10 +1313,18 @@
         }
         // 補抓本週已開盤各日（含起始日前一個交易日，供計算漲跌）的歷史 VIX，每日只抓一次
         const vixFetching = new Set();
+        const vixRefByDate = {};    // 存檔裡的昨收（期交所官方 ref），比用前一日收盤推算更準
         async function fetchVixDay(date) {
             if (date in vixByDate || vixFetching.has(date)) return;
             vixFetching.add(date);
-            try { storeVixTicks(date, (await getVixJSON(`date=${date}&`)).ticks); } catch (e) {} finally { vixFetching.delete(date); }
+            try {
+                // 先讀每日存檔（GitHub Actions：scripts/archive-vix.mjs，永久保存），沒有才向期交所抓（只保留約一個月）
+                let v = null;
+                try { const r = await fetch(`${HISTORY_BASE}vix/${date}.json`); if (r.ok) v = await r.json(); } catch (e) {}
+                if (!v || !(v.ticks || []).length) v = await getVixJSON(`date=${date}&`);
+                if (v.quote && v.quote.ref) vixRefByDate[date] = v.quote.ref;
+                storeVixTicks(date, v.ticks);
+            } catch (e) {} finally { vixFetching.delete(date); }
         }
         async function loadTableVix() {
             if (!globalData || !Array.isArray(globalData.yVix)) return;
@@ -1379,8 +1388,7 @@
                     const today = ymd(twNow());
                     const need = [...new Set(Object.values(daySessionDates()))]
                         .filter(d => d < today && !(d in vixByDate));
-                    await Promise.all(need.map(d => getVixJSON(`date=${d}&`)
-                        .then(v => storeVixTicks(d, v.ticks)).catch(() => {})));
+                    await Promise.all(need.map(fetchVixDay));
                 }
                 renderVixTile();
                 applyVixToChart(full);
