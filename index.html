@@ -202,8 +202,8 @@
             /* 圖表本體：填滿卡片剩餘空間 */
             #performance-chart { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; }
 
-            /* 頁尾在橫向時隱藏，把空間全留給圖表 */
-            footer { display: none !important; }
+            /* 頁尾、每盤績效表在橫向時隱藏，把空間全留給圖表 */
+            footer, #session-table-card { display: none !important; }
         }
     </style>
 </head>
@@ -320,6 +320,32 @@
             </div>
 
             <div id="performance-chart"></div>
+        </div>
+
+        <!-- 每盤績效表（本週 10 盤） -->
+        <div id="session-table-card" class="glass-card px-1 sm:px-5 py-3 sm:py-4">
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2 px-1">
+                <h2 class="text-sm sm:text-base font-black text-slate-800">每盤績效表（本週）</h2>
+                <p id="session-table-summary" class="text-[10px] sm:text-xs font-bold text-slate-400"></p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-[11px] sm:text-sm stat-value whitespace-nowrap">
+                    <thead>
+                        <tr class="text-slate-500 font-black border-b-2 border-slate-200">
+                            <th class="text-left py-2 px-1 sm:px-2">盤別</th>
+                            <th class="text-left py-2 px-1 sm:px-2 hidden sm:table-cell">時段</th>
+                            <th class="text-right py-2 px-1 sm:px-2">獲利金額</th>
+                            <th class="text-right py-2 px-1 sm:px-2">獲利率</th>
+                            <th class="text-right py-2 px-1 sm:px-2">手續費</th>
+                            <th class="text-right py-2 px-1 sm:px-2">交易口數</th>
+                            <th class="text-right py-2 px-1 sm:px-2">累計獲利率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="session-table-body"></tbody>
+                    <tfoot id="session-table-foot"></tfoot>
+                </table>
+            </div>
+            <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-2 px-1">交易口數 = 當盤手續費 ÷ 16 元；點選任一盤可切換上方圖表。</p>
         </div>
 
         <!-- 頁尾版本資訊 -->
@@ -641,7 +667,7 @@
                 const response = await fetch(`${CSV_URL}&t=${Date.now()}`);
                 const text = await response.text();
                 const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-                const raw = { x: [], yPrice: [], yProfit: [], yTimeWed: [], yTimeFri: [], yTotal: [], yTotalRaw: [], yPriceRaw: [] };
+                const raw = { x: [], yPrice: [], yProfit: [], yTimeWed: [], yTimeFri: [], yTotal: [], yTotalRaw: [], yPriceRaw: [], yProfitRaw: [], yPnlRaw: [], yFeeRaw: [] };
                 for (let i = 1; i < lines.length; i++) {
                     const cols = parseCSVLine(lines[i]);
                     if (cols.length >= 54) {
@@ -650,7 +676,12 @@
                         raw.yPriceRaw.push(p);
                         raw.yPrice.push(p);
                         // 資產欄空白時，試算表會算出 -100% 獲利率，視為無資料
-                        raw.yProfit.push(rawNumeric(cols[8]) === null ? null : rawNumeric(cols[26]));
+                        const hasAsset = rawNumeric(cols[8]) !== null;
+                        raw.yProfit.push(hasAsset ? rawNumeric(cols[26]) : null);
+                        // 每盤績效表用原始值（不平滑）：獲利率、獲利金額、手續費
+                        raw.yProfitRaw.push(hasAsset ? rawNumeric(cols[26]) : null);
+                        raw.yPnlRaw.push(hasAsset ? rawNumeric(cols[25]) : null);
+                        raw.yFeeRaw.push(hasAsset ? rawNumeric(cols[20]) : null);
                         raw.yTimeWed.push(rawNumeric(cols[52]));
                         raw.yTimeFri.push(rawNumeric(cols[53]));
                         const totalPoint = rawNumeric(cols[12]);
@@ -805,17 +836,99 @@
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
         }
 
+        function sessionBounds(idx) {
+            const r = rowRanges[idx];
+            const rawSi = r.start - 2;
+            const rawEi = Math.min(r.end - 2, globalData.x.length - 1);
+            if (rawSi >= globalData.x.length) return { si: rawSi, ei: rawEi };
+            return trimSessionByTime(rawSi, rawEi, r.type);
+        }
+
+        // ── 每盤績效表：本週 10 盤的獲利金額、獲利率、手續費、交易口數 ──
+        //    獲利率 / 獲利金額為本週累計值 → 每盤 = 本盤收盤值 − 上一盤收盤值（第一盤以本盤第一筆為基準）
+        //    手續費為券商當日累計值，跨日會歸零 → 逐筆累加正向增量，遇到下降視為歸零重算
+        const FEE_PER_LOT = 16;
+        function renderSessionTable() {
+            const body = document.getElementById('session-table-body');
+            const foot = document.getElementById('session-table-foot');
+            const summary = document.getElementById('session-table-summary');
+            if (!globalData || !body) return;
+            const n = globalData.x.length;
+
+            const lastAt = (arr, i, from = 0) => { for (let k = Math.min(i, n - 1); k >= from; k--) if (arr[k] !== null) return arr[k]; return null; };
+            const firstIn = (arr, a, b) => { for (let k = a; k <= b; k++) if (arr[k] !== null) return arr[k]; return null; };
+
+            const feeCum = []; let prevFee = null, acc = 0;
+            globalData.yFeeRaw.forEach(v => {
+                if (v !== null) { if (prevFee !== null) acc += v >= prevFee ? v - prevFee : v; prevFee = v; }
+                feeCum.push(acc);
+            });
+
+            const fmtNum = (v, d = 0) => v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+            const signed = (v, d) => `${v > 0 ? '+' : ''}${fmtNum(v, d)}`;
+            const tone = v => v > 0 ? 'text-rose-600' : v < 0 ? 'text-emerald-600' : 'text-slate-500';
+            const shortTime = s => (s || '').trim();
+
+            let rows = '', prevEnd = null, latestIdx = -1;
+            let sumPnl = 0, sumFee = 0, cumRate = null, win = 0, lose = 0, done = 0;
+            const stats = rowRanges.map((r, i) => {
+                const { si, ei } = sessionBounds(i);
+                if (si >= n) return null;
+                const pE = lastAt(globalData.yProfitRaw, ei, si), mE = lastAt(globalData.yPnlRaw, ei, si);
+                if (pE === null) return null;
+                const pB = prevEnd ? prevEnd.p : firstIn(globalData.yProfitRaw, si, ei);
+                const mB = prevEnd ? prevEnd.m : firstIn(globalData.yPnlRaw, si, ei);
+                const fee = feeCum[ei] - (prevEnd ? prevEnd.f : feeCum[si]);
+                prevEnd = { p: pE, m: mE ?? 0, f: feeCum[ei] };
+                latestIdx = i;
+                return { si, ei, rate: pE - pB, pnl: (mE ?? 0) - (mB ?? 0), fee, cum: pE };
+            });
+
+            stats.forEach((s, i) => {
+                const r = rowRanges[i];
+                const night = r.type === 'night';
+                const label = `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle ${night ? 'bg-slate-700' : 'bg-orange-400'}"></span>${r.label}`;
+                if (!s) {
+                    rows += `<tr class="border-b border-slate-100 text-slate-300"><td class="py-2 px-1 sm:px-2 font-black">${label}</td><td class="py-2 px-1 sm:px-2 hidden sm:table-cell">尚未開盤</td>` +
+                            `<td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td></tr>`;
+                    return;
+                }
+                done++; sumPnl += s.pnl; sumFee += s.fee; cumRate = s.cum;
+                if (s.pnl > 0) win++; else if (s.pnl < 0) lose++;
+                const lots = Math.round(s.fee / FEE_PER_LOT);
+                const tag = i === latestIdx ? '<span class="ml-1.5 text-[9px] sm:text-[10px] font-bold text-blue-500">最新</span>' : '';
+                const active = i === currentSessionIdx ? 'bg-orange-50' : 'hover:bg-slate-50';
+                rows += `<tr class="border-b border-slate-100 cursor-pointer ${active}" onclick="selectSession(${i})">` +
+                    `<td class="py-2 px-1 sm:px-2 font-black text-slate-700">${label}${tag}</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-slate-400 hidden sm:table-cell">${shortTime(globalData.x[s.si])} ~ ${shortTime(globalData.x[s.ei])}</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right font-bold ${tone(s.pnl)}">${signed(Math.round(s.pnl), 0)}</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right font-bold ${tone(s.rate)}">${signed(s.rate, 2)}%</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right text-slate-600">${fmtNum(s.fee)}</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right font-bold text-slate-700">${fmtNum(lots)}</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right ${tone(s.cum)}">${signed(s.cum, 2)}%</td></tr>`;
+            });
+            body.innerHTML = rows;
+
+            if (done) {
+                foot.innerHTML = `<tr class="border-t-2 border-slate-200 font-black">` +
+                    `<td class="py-2 px-1 sm:px-2 text-slate-700">本週合計</td><td class="py-2 px-1 sm:px-2 hidden sm:table-cell text-slate-400 font-bold">${done} 盤</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right ${tone(sumPnl)}">${signed(Math.round(sumPnl), 0)}</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right ${tone(cumRate)}">${signed(cumRate, 2)}%</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right text-slate-600">${fmtNum(sumFee)}</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right text-slate-700">${fmtNum(Math.round(sumFee / FEE_PER_LOT))}</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-right"></td></tr>`;
+                summary.innerText = `10 盤 · 已開 ${done} 盤 · 賺 ${win} 盤、賠 ${lose} 盤 · 累計 ${signed(cumRate, 2)}%`;
+            } else {
+                foot.innerHTML = '';
+                summary.innerText = '10 盤 · 本週尚無資料';
+            }
+        }
+
         function selectSession(idx) {
             if (!globalData || idx === -1 || !myChart) return;
             currentSessionIdx = idx;
             document.querySelectorAll('.session-btn').forEach((btn, i) => btn.classList.toggle('active', i === idx));
-            const r = rowRanges[idx];
-            const { si, ei } = (() => {
-                const rawSi = r.start - 2;
-                const rawEi = Math.min(r.end - 2, globalData.x.length - 1);
-                if (rawSi >= globalData.x.length) return { si: rawSi, ei: rawEi };
-                return trimSessionByTime(rawSi, rawEi, r.type);
-            })();
+            const { si, ei } = sessionBounds(idx);
             if (si >= globalData.x.length) return;
 
             const sx = globalData.x.slice(si, ei + 1);
@@ -886,6 +999,7 @@
             });
             myChart.setOption({ yAxis: curY });
             myChart.dispatchAction({ type: 'dataZoom', batch: [1, 2, 3, 4].map(i => ({ dataZoomIndex: i, start: 0, end: 100 })) });
+            renderSessionTable();
         }
 
         function initChart(data) {
