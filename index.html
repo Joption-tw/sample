@@ -771,6 +771,7 @@
                             autoIdx = lv;
                         }
                         selectSession(autoIdx >= 0 ? autoIdx : 0);
+                        loadTableVix();
                         const updateStr = new Date().toLocaleString([], {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
                         document.getElementById('update-time').innerText = new Date().toLocaleString();
                         document.getElementById('update-time-mobile').innerText = updateStr;
@@ -900,6 +901,14 @@
         //    獲利率為本週累計值 → 每盤 = 本盤收盤值 − 上一盤收盤值（第一盤以本盤第一筆為基準）
         //    交易口數 = 當盤手續費 ÷ 16；手續費為券商當日累計值，跨日會歸零 → 逐筆累加正向增量，遇到下降視為歸零重算
         const FEE_PER_LOT = 16;
+        // 各盤的日期：試算表第一筆「日期」為週三（周三晚），其餘依固定天數位移；周三晚 = 起始日 … 週三早 = +7 天
+        const DAY_OFFSET = [0, 1, 1, 2, 2, 5, 5, 6, 6, 7];
+        function sessionDate(i) {
+            const ws = globalData && globalData.weekStart ? new Date(globalData.weekStart.trim().replace(/-/g, '/')) : null;
+            if (!ws || isNaN(ws)) return null;
+            const d = new Date(ws); d.setDate(d.getDate() + DAY_OFFSET[i]);
+            return d;
+        }
         function renderSessionTable() {
             const body = document.getElementById('session-table-body');
             const foot = document.getElementById('session-table-foot');
@@ -911,13 +920,7 @@
             const lastAt = (arr, i, from = 0) => { for (let k = Math.min(i, n - 1); k >= from; k--) if (arr[k] !== null) return arr[k]; return null; };
             const firstIn = (arr, a, b) => { for (let k = a; k <= b; k++) if (arr[k] !== null) return arr[k]; return null; };
             const timeOf = k => { const s = globalData.x[k] || ''; return s.split(' ')[1] || s; };
-            const DAY_OFFSET = [0, 1, 1, 2, 2, 5, 5, 6, 6, 7];   // 對應 rowRanges：周三晚 = 起始日 … 週三早 = +7 天
-            const ws = globalData.weekStart ? new Date(globalData.weekStart.trim().replace(/-/g, '/')) : null;
-            const dateOf = i => {
-                if (!ws || isNaN(ws)) return '--';
-                const d = new Date(ws); d.setDate(d.getDate() + DAY_OFFSET[i]);
-                return `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, '0')}`;
-            };
+            const dateOf = i => { const d = sessionDate(i); return d ? `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, '0')}` : '--'; };
             // 與卡片相同：取區間內第一個 / 最後一個非 0 值算漲跌
             const lastChg = (arr, si, ei) => {
                 const vals = arr.slice(si, ei + 1).filter(v => v !== null && v !== undefined && v !== 0);
@@ -966,7 +969,7 @@
                     rate: pE - pB, lots: Math.round(fee / FEE_PER_LOT), cum: pE, entry, exit,
                     swing: Math.round(calculateSwing100(globalData.yPriceRaw.slice(si, ei + 1), 100)),
                     ba: lastChg(globalData.yTimeWed, si, ei), bb: lastChg(globalData.yTimeFri, si, ei),
-                    vix: hasVix ? lastChg(globalData.yVix, si, ei) : null
+                    vix: hasVix ? vixOfDay(sessionDate(i)) : null
                 };
             });
 
@@ -996,7 +999,7 @@
                     td(fmtNum(s.lots), 'text-right font-bold text-slate-700') +
                     valCell(s.ba, 'text-red-600', 0) +
                     valCell(s.bb, 'text-green-600', 0) +
-                    (hasVix ? (night ? td(dash, 'text-right') : valCell(s.vix, 'text-amber-600', 2)) : '') +
+                    (hasVix ? valCell(s.vix, 'text-amber-600', 2) : '') +
                     td(`${signed(s.rate, 2)}%`, `text-right font-bold ${tone(s.rate)}`) +
                     td(`${signed(s.cum, 2)}%`, `text-right ${tone(s.cum)}`) + `</tr>`;
             });
@@ -1238,6 +1241,51 @@
             return arr;
         }
 
+        // ── 每盤績效表用：某日日盤 VIX 收盤與漲跌（夜盤無 VIX，沿用同一天日盤）──
+        function vixClose(date) {
+            if (vixLive && vixLive.tradeDay === date && vixLive.quote && vixLive.quote.last != null) return vixLive.quote.last;
+            const map = vixByDate[date];
+            const ks = map ? Object.keys(map).map(Number) : [];
+            return ks.length ? map[Math.max(...ks)] : null;
+        }
+        function vixRef(date) {
+            if (vixLive && vixLive.tradeDay === date && vixLive.quote && vixLive.quote.ref) return vixLive.quote.ref;
+            const prev = Object.keys(vixByDate).filter(d => d < date && vixClose(d) !== null).sort().pop();
+            return prev ? vixClose(prev) : null;
+        }
+        function vixOfDay(d) {
+            if (!d) return null;
+            const date = ymd(d), last = vixClose(date);
+            if (last === null) return null;
+            const ref = vixRef(date);
+            if (!ref) return { last, chg: 0, pct: 0, many: false };
+            return { last, chg: last - ref, pct: (last - ref) / ref * 100, many: true };
+        }
+        // 補抓本週已開盤各日（含起始日前一個交易日，供計算漲跌）的歷史 VIX，每日只抓一次
+        const vixFetching = new Set();
+        async function fetchVixDay(date) {
+            if (date in vixByDate || vixFetching.has(date)) return;
+            vixFetching.add(date);
+            try { storeVixTicks(date, (await getVixJSON(`date=${date}&`)).ticks); } catch (e) {} finally { vixFetching.delete(date); }
+        }
+        async function loadTableVix() {
+            if (!globalData || !Array.isArray(globalData.yVix)) return;
+            const today = ymd(twNow()), n = globalData.x.length;
+            const dates = [...new Set(rowRanges.map((r, i) => i).filter(i => sessionBounds(i).si < n && sessionDate(i))
+                                               .map(i => ymd(sessionDate(i))))].filter(d => d < today);
+            await Promise.all(dates.map(fetchVixDay));
+            const first = sessionDate(0);
+            if (first) {
+                for (let k = 1; k <= 6; k++) {
+                    const d = new Date(first); d.setDate(d.getDate() - k);
+                    if (d.getDay() === 0 || d.getDay() === 6) continue;
+                    await fetchVixDay(ymd(d));
+                    if (vixClose(ymd(d)) !== null) break;
+                }
+            }
+            renderSessionTable();
+        }
+
         function renderVixTile() {
             const q = vixLive && vixLive.quote;
             if (!q || q.last == null) return;
@@ -1287,6 +1335,7 @@
                 }
                 renderVixTile();
                 applyVixToChart(full);
+                if (full) loadTableVix();
             } catch (e) { console.warn('VIX 資料暫時無法取得', e); }
             clearTimeout(vixTimer);
             vixTimer = setTimeout(() => loadVix(false), isVixSession() ? 15000 : 300000);
