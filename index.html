@@ -722,7 +722,7 @@
             const loading = document.getElementById('loading-overlay');
             loading.classList.remove('hidden'); loading.style.opacity = '1';
             try {
-                const response = await fetch(viewWeek ? `${HISTORY_BASE}${viewWeek}.csv?t=${Date.now()}` : `${CSV_URL}&t=${Date.now()}`);
+                const response = await fetch(viewWeek ? `${HISTORY_BASE}${viewWeek}.csv?t=${Date.now()}` : `${CSV_URL}${CSV_URL.includes('?') ? '&' : '?'}t=${Date.now()}`);
                 if (!response.ok) throw new Error(`資料讀取失敗：${response.status}`);
                 const text = await response.text();
                 const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
