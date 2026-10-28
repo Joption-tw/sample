@@ -336,7 +336,6 @@
                             <th class="text-left py-2 px-1 sm:px-2 hidden sm:table-cell">時段</th>
                             <th class="text-right py-2 px-1 sm:px-2">獲利金額</th>
                             <th class="text-right py-2 px-1 sm:px-2">獲利率</th>
-                            <th class="text-right py-2 px-1 sm:px-2">手續費</th>
                             <th class="text-right py-2 px-1 sm:px-2">交易口數</th>
                             <th class="text-right py-2 px-1 sm:px-2">累計獲利率</th>
                         </tr>
@@ -345,7 +344,7 @@
                     <tfoot id="session-table-foot"></tfoot>
                 </table>
             </div>
-            <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-2 px-1">交易口數 = 當盤手續費 ÷ 16 元；點選任一盤可切換上方圖表。</p>
+            <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-2 px-1">點選任一盤可切換上方圖表。</p>
         </div>
 
         <!-- 頁尾版本資訊 -->
@@ -890,7 +889,7 @@
                 const label = `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle ${night ? 'bg-slate-700' : 'bg-orange-400'}"></span>${r.label}`;
                 if (!s) {
                     rows += `<tr class="border-b border-slate-100 text-slate-300"><td class="py-2 px-1 sm:px-2 font-black">${label}</td><td class="py-2 px-1 sm:px-2 hidden sm:table-cell">尚未開盤</td>` +
-                            `<td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td></tr>`;
+                            `<td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td></tr>`;
                     return;
                 }
                 done++; sumPnl += s.pnl; sumFee += s.fee; cumRate = s.cum;
@@ -903,7 +902,6 @@
                     `<td class="py-2 px-1 sm:px-2 text-slate-400 hidden sm:table-cell">${shortTime(globalData.x[s.si])} ~ ${shortTime(globalData.x[s.ei])}</td>` +
                     `<td class="py-2 px-1 sm:px-2 text-right font-bold ${tone(s.pnl)}">${signed(Math.round(s.pnl), 0)}</td>` +
                     `<td class="py-2 px-1 sm:px-2 text-right font-bold ${tone(s.rate)}">${signed(s.rate, 2)}%</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-right text-slate-600">${fmtNum(s.fee)}</td>` +
                     `<td class="py-2 px-1 sm:px-2 text-right font-bold text-slate-700">${fmtNum(lots)}</td>` +
                     `<td class="py-2 px-1 sm:px-2 text-right ${tone(s.cum)}">${signed(s.cum, 2)}%</td></tr>`;
             });
@@ -914,7 +912,6 @@
                     `<td class="py-2 px-1 sm:px-2 text-slate-700">本週合計</td><td class="py-2 px-1 sm:px-2 hidden sm:table-cell text-slate-400 font-bold">${done} 盤</td>` +
                     `<td class="py-2 px-1 sm:px-2 text-right ${tone(sumPnl)}">${signed(Math.round(sumPnl), 0)}</td>` +
                     `<td class="py-2 px-1 sm:px-2 text-right ${tone(cumRate)}">${signed(cumRate, 2)}%</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-right text-slate-600">${fmtNum(sumFee)}</td>` +
                     `<td class="py-2 px-1 sm:px-2 text-right text-slate-700">${fmtNum(Math.round(sumFee / FEE_PER_LOT))}</td>` +
                     `<td class="py-2 px-1 sm:px-2 text-right"></td></tr>`;
                 summary.innerText = `10 盤 · 已開 ${done} 盤 · 賺 ${win} 盤、賠 ${lose} 盤 · 累計 ${signed(cumRate, 2)}%`;
