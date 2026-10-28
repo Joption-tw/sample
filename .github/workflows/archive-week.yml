@@ -1,0 +1,43 @@
+name: 每週績效存檔
+
+# 試算表每週三 15:00（台灣時間）清空，所以：
+#   - 週三 13:50～14:55 每 10 分鐘存一次（週三早盤 13:45 收盤後，清空前）
+#   - 平日每天 05:15、13:55 各存一次（夜盤、日盤收盤後），萬一週三排程延遲也只少最後一盤
+# GitHub 排程用 UTC：台灣時間 = UTC + 8
+on:
+  schedule:
+    - cron: '50 5 * * 3'        # 週三 13:50
+    - cron: '*/10 6 * * 3'      # 週三 14:00～14:50
+    - cron: '55 5 * * 1-5'      # 週一～五 13:55
+    - cron: '15 21 * * 0-4'     # 週一～五 05:15
+  workflow_dispatch:            # 可在 GitHub Actions 頁面手動執行
+  push:
+    paths:
+      - 'scripts/archive-week.mjs'
+      - '.github/workflows/archive-week.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: archive-week
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/archive-week.mjs
+      - name: 有變動才 commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git add history
+          if git diff --cached --quiet; then echo "無變動"; exit 0; fi
+          git commit -m "每週績效存檔 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+          git pull --rebase
+          git push
