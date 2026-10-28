@@ -334,9 +334,13 @@
                         <tr class="text-slate-500 font-black border-b-2 border-slate-200">
                             <th class="text-left py-2 px-1 sm:px-2">日期</th>
                             <th class="text-left py-2 px-1 sm:px-2">盤別</th>
+                            <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">震幅</span><span class="hidden sm:inline">百點震幅</span></th>
                             <th class="text-center py-2 px-1 sm:px-2"><span class="sm:hidden">進場</span><span class="hidden sm:inline">進場時間點</span></th>
                             <th class="text-center py-2 px-1 sm:px-2"><span class="sm:hidden">出場</span><span class="hidden sm:inline">出場時間點</span></th>
                             <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">口數</span><span class="hidden sm:inline">交易口數</span></th>
+                            <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">BA</span><span class="hidden sm:inline">週三時價 (BA)</span></th>
+                            <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">BB</span><span class="hidden sm:inline">週五時價 (BB)</span></th>
+                            <th class="text-right py-2 px-1 sm:px-2">VIX</th>
                             <th class="text-right py-2 px-1 sm:px-2">獲利率</th>
                             <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">累積</span><span class="hidden sm:inline">累積獲利率</span></th>
                         </tr>
@@ -345,7 +349,7 @@
                     <tfoot id="session-table-foot"></tfoot>
                 </table>
             </div>
-            <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-2 px-1">點選任一盤可切換上方圖表。</p>
+            <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-2 px-1">點選任一盤可切換上方圖表。<span class="sm:hidden">表格可左右滑動。</span></p>
         </div>
 
         <!-- 頁尾版本資訊 -->
@@ -891,8 +895,8 @@
             return trimSessionByTime(rawSi, rawEi, r.type);
         }
 
-        // ── 每盤績效表：本週 10 盤的進場 / 出場時間點、交易口數、獲利率、累積獲利率 ──
-        //    進出場：與上方卡片相同規則（總點數第一次非 0 = 進場；之後第一次回到 0 = 出場）
+        // ── 每盤績效表：本週 10 盤，欄位與上方卡片相同（每盤各算一次）──
+        //    百點震幅 / 進出場 / 週三、週五時價 / VIX：與上方卡片相同算法，只是套用到每一盤
         //    獲利率為本週累計值 → 每盤 = 本盤收盤值 − 上一盤收盤值（第一盤以本盤第一筆為基準）
         //    交易口數 = 當盤手續費 ÷ 16；手續費為券商當日累計值，跨日會歸零 → 逐筆累加正向增量，遇到下降視為歸零重算
         const FEE_PER_LOT = 16;
@@ -902,9 +906,11 @@
             const summary = document.getElementById('session-table-summary');
             if (!globalData || !body) return;
             const n = globalData.x.length;
+            const hasVix = Array.isArray(globalData.yVix);
 
             const lastAt = (arr, i, from = 0) => { for (let k = Math.min(i, n - 1); k >= from; k--) if (arr[k] !== null) return arr[k]; return null; };
             const firstIn = (arr, a, b) => { for (let k = a; k <= b; k++) if (arr[k] !== null) return arr[k]; return null; };
+            const timeOf = k => { const s = globalData.x[k] || ''; return s.split(' ')[1] || s; };
             const DAY_OFFSET = [0, 1, 1, 2, 2, 5, 5, 6, 6, 7];   // 對應 rowRanges：周三晚 = 起始日 … 週三早 = +7 天
             const ws = globalData.weekStart ? new Date(globalData.weekStart.trim().replace(/-/g, '/')) : null;
             const dateOf = i => {
@@ -912,7 +918,13 @@
                 const d = new Date(ws); d.setDate(d.getDate() + DAY_OFFSET[i]);
                 return `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, '0')}`;
             };
-            const timeOf = k => { const s = globalData.x[k] || ''; return s.split(' ')[1] || s; };
+            // 與卡片相同：取區間內第一個 / 最後一個非 0 值算漲跌
+            const lastChg = (arr, si, ei) => {
+                const vals = arr.slice(si, ei + 1).filter(v => v !== null && v !== undefined && v !== 0);
+                if (!vals.length) return null;
+                const first = vals[0], last = vals[vals.length - 1], chg = last - first;
+                return { last, chg, pct: first !== 0 ? chg / first * 100 : 0, many: vals.length > 1 };
+            };
 
             const feeCum = []; let prevFee = null, acc = 0;
             globalData.yFeeRaw.forEach(v => {
@@ -923,6 +935,14 @@
             const fmtNum = (v, d = 0) => v.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
             const signed = (v, d) => `${v > 0 ? '+' : ''}${fmtNum(v, d)}`;
             const tone = v => v > 0 ? 'text-rose-600' : v < 0 ? 'text-emerald-600' : 'text-slate-500';
+            const td = (html, cls = '') => `<td class="py-2 px-1 sm:px-2 ${cls}">${html}</td>`;
+            const dash = '<span class="text-slate-300">--</span>';
+            // 數值 + 下方小字漲跌（同卡片樣式）
+            const valCell = (r, color, d) => {
+                if (!r) return td(dash, 'text-right');
+                const sub = r.many ? `<div class="text-[9px] sm:text-[10px] font-bold ${r.chg >= 0 ? 'text-rose-500' : 'text-emerald-500'}">${signed(d ? r.chg : Math.round(r.chg), d)}（${signed(r.pct, 2)}%）</div>` : '';
+                return td(`<div class="font-black ${color}">${fmtNum(r.last, d)}</div>${sub}`, 'text-right leading-tight');
+            };
 
             let rows = '', prevEnd = null, latestIdx = -1;
             let sumLots = 0, cumRate = null, win = 0, lose = 0, done = 0;
@@ -942,7 +962,12 @@
                     if (entry === null) { if (t !== 0 && t !== null) entry = k; }
                     else if (t === 0) { exit = k; break; }
                 }
-                return { rate: pE - pB, lots: Math.round(fee / FEE_PER_LOT), cum: pE, entry, exit };
+                return {
+                    rate: pE - pB, lots: Math.round(fee / FEE_PER_LOT), cum: pE, entry, exit,
+                    swing: Math.round(calculateSwing100(globalData.yPriceRaw.slice(si, ei + 1), 100)),
+                    ba: lastChg(globalData.yTimeWed, si, ei), bb: lastChg(globalData.yTimeFri, si, ei),
+                    vix: hasVix ? lastChg(globalData.yVix, si, ei) : null
+                };
             });
 
             stats.forEach((s, i) => {
@@ -950,36 +975,39 @@
                 const night = r.type === 'night';
                 const label = `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle ${night ? 'bg-slate-700' : 'bg-orange-400'}"></span>${r.label}`;
                 if (!s) {
-                    rows += `<tr class="border-b border-slate-100 text-slate-300"><td class="py-2 px-1 sm:px-2">${dateOf(i)}</td><td class="py-2 px-1 sm:px-2 font-black">${label}</td>` +
-                            `<td class="py-2 px-1 sm:px-2 text-center">尚未開盤</td><td class="py-2 px-1 sm:px-2 text-center">--</td>` +
-                            `<td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td><td class="py-2 px-1 sm:px-2 text-right">--</td></tr>`;
+                    const blanks = hasVix ? 6 : 5;
+                    rows += `<tr class="border-b border-slate-100 text-slate-300">` + td(dateOf(i)) + td(label, 'font-black') + td('--', 'text-right') +
+                            td('尚未開盤', 'text-center') + td('--', 'text-center') + td('--', 'text-right').repeat(blanks) + `</tr>`;
                     return;
                 }
                 done++; sumLots += s.lots; cumRate = s.cum;
                 if (s.rate > 0) win++; else if (s.rate < 0) lose++;
-                const entryTxt = s.entry !== null ? timeOf(s.entry) : '<span class="text-slate-300">--</span>';
+                const entryTxt = s.entry !== null ? timeOf(s.entry) : dash;
                 const exitTxt = s.exit !== null ? timeOf(s.exit)
-                              : s.entry !== null ? '<span class="text-blue-500 font-bold">持倉中</span>' : '<span class="text-slate-300">--</span>';
+                              : s.entry !== null ? '<span class="text-blue-500 font-bold">持倉中</span>' : dash;
                 const tag = i === latestIdx ? '<span class="hidden sm:inline ml-1.5 text-[10px] font-bold text-blue-500">最新</span>' : '';
                 const active = i === currentSessionIdx ? 'bg-orange-50' : 'hover:bg-slate-50';
                 rows += `<tr class="border-b border-slate-100 cursor-pointer ${active}" onclick="selectSession(${i})">` +
-                    `<td class="py-2 px-1 sm:px-2 text-slate-500 font-bold">${dateOf(i)}</td>` +
-                    `<td class="py-2 px-1 sm:px-2 font-black text-slate-700">${label}${tag}</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-center text-indigo-600 font-bold">${entryTxt}</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-center text-slate-600 font-bold">${exitTxt}</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-right font-bold text-slate-700">${fmtNum(s.lots)}</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-right font-bold ${tone(s.rate)}">${signed(s.rate, 2)}%</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-right ${tone(s.cum)}">${signed(s.cum, 2)}%</td></tr>`;
+                    td(dateOf(i), 'text-slate-500 font-bold') +
+                    td(label + tag, 'font-black text-slate-700') +
+                    td(fmtNum(s.swing), 'text-right font-bold text-slate-800') +
+                    td(entryTxt, 'text-center text-indigo-600 font-bold') +
+                    td(exitTxt, 'text-center text-slate-600 font-bold') +
+                    td(fmtNum(s.lots), 'text-right font-bold text-slate-700') +
+                    valCell(s.ba, 'text-red-600', 0) +
+                    valCell(s.bb, 'text-green-600', 0) +
+                    (hasVix ? (night ? td(dash, 'text-right') : valCell(s.vix, 'text-amber-600', 2)) : '') +
+                    td(`${signed(s.rate, 2)}%`, `text-right font-bold ${tone(s.rate)}`) +
+                    td(`${signed(s.cum, 2)}%`, `text-right ${tone(s.cum)}`) + `</tr>`;
             });
             body.innerHTML = rows;
 
             if (done) {
                 foot.innerHTML = `<tr class="border-t-2 border-slate-200 font-black">` +
-                    `<td class="py-2 px-1 sm:px-2 text-slate-700" colspan="2">本週合計</td>` +
+                    `<td class="py-2 px-1 sm:px-2 text-slate-700" colspan="2">本週合計</td>` + td('') +
                     `<td class="py-2 px-1 sm:px-2 text-center text-slate-400 font-bold" colspan="2">${done} 盤</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-right text-slate-700">${fmtNum(sumLots)}</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-right ${tone(cumRate)}">${signed(cumRate, 2)}%</td>` +
-                    `<td class="py-2 px-1 sm:px-2 text-right"></td></tr>`;
+                    td(fmtNum(sumLots), 'text-right text-slate-700') + td('').repeat(hasVix ? 3 : 2) +
+                    td(`${signed(cumRate, 2)}%`, `text-right ${tone(cumRate)}`) + td('') + `</tr>`;
                 summary.innerText = `${dateOf(0)} ~ ${dateOf(9)} · 10 盤 · 已開 ${done} 盤 · 賺 ${win} 盤、賠 ${lose} 盤 · 累積 ${signed(cumRate, 2)}%`;
             } else {
                 foot.innerHTML = '';
@@ -1227,6 +1255,7 @@
         function applyVixToChart(full) {
             if (!globalData || !myChart) return;
             globalData.yVix = buildVixSeries();
+            renderSessionTable();
             if (full) { updateChartUI(); return; }
             myChart.setOption({ series: [{ name: 'VIX', data: axisState.rVix ? globalData.yVix : [] }] });
             if (currentSessionIdx === -1 || !axisState.rVix) return;
