@@ -1216,18 +1216,23 @@
             }
         }
 
+        // 訪客計數：免帳號的 Abacus 計數服務（原本的 Upstash Redis 已連不上）
+        //   三個網址（sample / demo-performance / Vercel）共用同一組計數；每次開頁 +1
+        //   total = 累計；day-YYYYMMDD = 今日（台灣時間）
+        const COUNTER_URL = 'https://abacus.jasoncameron.dev/hit/joption-tw-demo';
         async function fetchVisits() {
-            const apiUrl = location.hostname.includes('github.io')
-                ? 'https://www.joption.org/api/visits'
-                : '/api/visits';
+            const tw = new Date(Date.now() + 8 * 3600e3);
+            const day = tw.toISOString().slice(0, 10).replace(/-/g, '');
             try {
-                const res = await fetch(apiUrl);
-                if (!res.ok) return;
-                const data = await res.json();
+                const [total, today] = await Promise.all(['total', `day-${day}`].map(async key => {
+                    const res = await fetch(`${COUNTER_URL}/${key}`);
+                    if (!res.ok) throw new Error(res.status);
+                    return (await res.json()).value;
+                }));
                 const todayEl = document.getElementById('visit-today');
                 const totalEl = document.getElementById('visit-total');
-                if (todayEl) todayEl.innerText = (data.today ?? 0).toLocaleString();
-                if (totalEl) totalEl.innerText = (data.total ?? 0).toLocaleString();
+                if (todayEl) todayEl.innerText = (today ?? 0).toLocaleString();
+                if (totalEl) totalEl.innerText = (total ?? 0).toLocaleString();
             } catch (e) { /* 靜默失敗 */ }
         }
 
