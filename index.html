@@ -1292,7 +1292,7 @@
 
         // ── 每盤績效表用：某日日盤 VIX 收盤與漲跌（夜盤無 VIX，沿用同一天日盤）──
         function vixClose(date) {
-            if (vixLive && vixLive.tradeDay === date && vixLive.quote && vixLive.quote.last != null) return vixLive.quote.last;
+            if (vixLive && vixLive.tradeDay === date && vixLive.quote && vixLive.quote.last > 0) return vixLive.quote.last;   // 開盤前 last = 0，改看走勢
             const map = vixByDate[date];
             const ks = map ? Object.keys(map).map(Number) : [];
             return ks.length ? map[Math.max(...ks)] : null;
@@ -1346,7 +1346,7 @@
 
         function renderVixTile() {
             const q = vixLive && vixLive.quote;
-            if (!q || q.last == null) return;
+            if (!q || !(q.last > 0)) return;      // 開盤前 last = 0：卡片保留上一個交易日的值
             const td = vixLive.tradeDay || '';
             document.getElementById('vix-day').innerText = td ? `${+td.slice(4, 6)}/${+td.slice(6)}` : '';
             document.getElementById('vix-last').innerText = q.last.toFixed(2);
