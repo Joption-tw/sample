@@ -346,11 +346,11 @@
                             <th class="text-center py-2 px-1 sm:px-2"><span class="sm:hidden">進場</span><span class="hidden sm:inline">進場時間點</span></th>
                             <th class="text-center py-2 px-1 sm:px-2"><span class="sm:hidden">出場</span><span class="hidden sm:inline">出場時間點</span></th>
                             <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">口數</span><span class="hidden sm:inline">交易口數</span></th>
+                            <th class="text-right py-2 px-1 sm:px-2">獲利率</th>
+                            <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">累積</span><span class="hidden sm:inline">累積獲利率</span></th>
                             <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">BA</span><span class="hidden sm:inline">週三時價 (BA)</span></th>
                             <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">BB</span><span class="hidden sm:inline">週五時價 (BB)</span></th>
                             <th class="text-right py-2 px-1 sm:px-2">VIX</th>
-                            <th class="text-right py-2 px-1 sm:px-2">獲利率</th>
-                            <th class="text-right py-2 px-1 sm:px-2"><span class="sm:hidden">累積</span><span class="hidden sm:inline">累積獲利率</span></th>
                         </tr>
                     </thead>
                     <tbody id="session-table-body"></tbody>
@@ -1091,11 +1091,11 @@
                     td(entryTxt, 'text-center text-indigo-600 font-bold') +
                     td(exitTxt, 'text-center text-slate-600 font-bold') +
                     td(fmtNum(s.lots), 'text-right font-bold text-slate-700') +
+                    td(`${signed(s.rate, 2)}%`, `text-right font-bold ${tone(s.rate)}`) +
+                    td(`${signed(s.cum, 2)}%`, `text-right ${tone(s.cum)}`) +
                     valCell(s.ba, 'text-red-600', 0) +
                     valCell(s.bb, 'text-green-600', 0) +
-                    (hasVix ? valCell(s.vix, 'text-amber-600', 2) : '') +
-                    td(`${signed(s.rate, 2)}%`, `text-right font-bold ${tone(s.rate)}`) +
-                    td(`${signed(s.cum, 2)}%`, `text-right ${tone(s.cum)}`) + `</tr>`;
+                    (hasVix ? valCell(s.vix, 'text-amber-600', 2) : '') + `</tr>`;
             });
             body.innerHTML = rows;
 
@@ -1118,8 +1118,8 @@
                 foot.innerHTML = `<tr class="border-t-2 border-slate-200 font-black">` +
                     `<td class="py-2 px-1 sm:px-2 text-slate-700" colspan="2">本週合計</td>` + td('') +
                     `<td class="py-2 px-1 sm:px-2 text-center text-slate-400 font-bold" colspan="2">${done} 盤</td>` +
-                    td(fmtNum(sumLots), 'text-right text-slate-700') + td('').repeat(hasVix ? 3 : 2) +
-                    td(`${signed(cumRate, 2)}%`, `text-right ${tone(cumRate)}`) + td('') + `</tr>`;
+                    td(fmtNum(sumLots), 'text-right text-slate-700') +
+                    td(`${signed(cumRate, 2)}%`, `text-right ${tone(cumRate)}`) + td('') + td('').repeat(hasVix ? 3 : 2) + `</tr>`;
                 summary.innerText = `${dateOf(0)} ~ ${dateOf(9)} · 10 盤 · 已開 ${done} 盤 · 勝 ${win} 盤、敗 ${lose} 盤 · 累積 ${signed(cumRate, 2)}%`;
             } else {
                 foot.innerHTML = '';
