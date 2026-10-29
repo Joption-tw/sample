@@ -323,16 +323,19 @@
         </div>
 
         <!-- 每盤績效表（本週 10 盤） -->
-        <div id="session-table-card" class="glass-card px-1 sm:px-5 py-3 sm:py-4">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-2 px-1">
-                <h2 class="text-sm sm:text-base font-black text-slate-800">每盤績效表<span id="session-table-week">（本週）</span></h2>
-                <p id="session-table-summary" class="text-[10px] sm:text-xs font-bold text-slate-400"></p>
-                <label class="ml-auto flex items-center gap-1.5 text-[10px] sm:text-xs font-black text-slate-500">歷史週次
-                    <select id="week-select" onchange="changeWeek(this.value)" class="border-2 border-blue-200 rounded-md px-2 py-1 text-xs font-bold text-slate-700 bg-white cursor-pointer hover:border-blue-400">
+        <div id="session-table-card" class="glass-card overflow-hidden">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-slate-900 px-3 sm:px-5 py-2.5 sm:py-3">
+                <h2 class="text-sm sm:text-lg font-black text-amber-300">每盤績效表<span id="session-table-week">（本週）</span></h2>
+                <p id="session-table-summary" class="text-[10px] sm:text-xs font-bold text-slate-300"></p>
+                <label class="ml-auto flex items-center gap-1.5 text-[10px] sm:text-xs font-black text-slate-300">歷史週次
+                    <select id="week-select" onchange="changeWeek(this.value)" class="border-2 border-slate-600 rounded-md px-2 py-1 text-xs font-bold text-slate-700 bg-white cursor-pointer hover:border-blue-400">
                         <option value="">本週（即時）</option>
                     </select>
                 </label>
             </div>
+            <div class="px-1 sm:px-5 py-3 sm:py-4">
+            <!-- 每盤勝敗格：勝 = 紅、敗 = 綠（台股慣例），尚未開盤顯示日期；點一下切換上方圖表 -->
+            <div id="session-strip" class="grid grid-cols-5 sm:grid-cols-10 gap-x-1.5 sm:gap-x-2.5 gap-y-2.5 px-1 mb-4"></div>
             <div class="overflow-x-auto">
                 <table class="w-full text-[11px] sm:text-sm stat-value whitespace-nowrap">
                     <thead>
@@ -355,6 +358,7 @@
                 </table>
             </div>
             <p class="text-[9px] sm:text-[10px] font-bold text-slate-400 mt-2 px-1">點選任一盤可切換上方圖表。<span class="sm:hidden">表格可左右滑動。</span></p>
+            </div>
         </div>
 
         <!-- 頁尾版本資訊 -->
@@ -1095,13 +1099,28 @@
             });
             body.innerHTML = rows;
 
+            // 每盤勝敗格
+            const strip = document.getElementById('session-strip');
+            if (strip) strip.innerHTML = stats.map((s, i) => {
+                const r = rowRanges[i];
+                const head = `<div class="text-[10px] sm:text-xs font-black mb-1 ${r.type === 'night' ? 'text-slate-700' : 'text-orange-500'}">${r.label.slice(1)}</div>`;
+                const ring = i === currentSessionIdx ? 'ring-2 ring-blue-500 ring-offset-2' : '';
+                if (!s) return `<div class="text-center">${head}` +
+                    `<div class="h-9 sm:h-11 rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 text-xs ${ring}">•</div>` +
+                    `<div class="text-[9px] sm:text-[11px] font-bold text-slate-300 mt-1">${dateOf(i)}</div></div>`;
+                const res = s.rate > 0 ? ['勝', 'bg-[#d9566a]'] : s.rate < 0 ? ['敗', 'bg-[#4f9a6b]'] : ['平', 'bg-slate-400'];
+                return `<div class="text-center cursor-pointer" onclick="selectSession(${i})">${head}` +
+                    `<div class="h-9 sm:h-11 rounded-lg ${res[1]} flex items-center justify-center text-white text-sm sm:text-lg font-black hover:brightness-110 ${ring}">${res[0]}</div>` +
+                    `<div class="text-[9px] sm:text-[11px] font-black mt-1 stat-value ${tone(s.rate)}">${signed(s.rate, 2)}%</div></div>`;
+            }).join('');
+
             if (done) {
                 foot.innerHTML = `<tr class="border-t-2 border-slate-200 font-black">` +
                     `<td class="py-2 px-1 sm:px-2 text-slate-700" colspan="2">本週合計</td>` + td('') +
                     `<td class="py-2 px-1 sm:px-2 text-center text-slate-400 font-bold" colspan="2">${done} 盤</td>` +
                     td(fmtNum(sumLots), 'text-right text-slate-700') + td('').repeat(hasVix ? 3 : 2) +
                     td(`${signed(cumRate, 2)}%`, `text-right ${tone(cumRate)}`) + td('') + `</tr>`;
-                summary.innerText = `${dateOf(0)} ~ ${dateOf(9)} · 10 盤 · 已開 ${done} 盤 · 賺 ${win} 盤、賠 ${lose} 盤 · 累積 ${signed(cumRate, 2)}%`;
+                summary.innerText = `${dateOf(0)} ~ ${dateOf(9)} · 10 盤 · 已開 ${done} 盤 · 勝 ${win} 盤、敗 ${lose} 盤 · 累積 ${signed(cumRate, 2)}%`;
             } else {
                 foot.innerHTML = '';
                 summary.innerText = '10 盤 · 本週尚無資料';
