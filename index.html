@@ -462,6 +462,22 @@
         };
         let yFrameLock = {};      // 手機用：{ 3: 'wed' } 代表時間價值軸目前鎖定框選「週三」那條線
 
+        // 記住圖表顯示設定（哪些軸打開、點圖示放大鎖定哪條線），重新整理後沿用上次看的樣子；只存在這台瀏覽器
+        const CHART_PREF_KEY = 'joption-chart-pref';
+        function saveChartPref() {
+            try { localStorage.setItem(CHART_PREF_KEY, JSON.stringify({ axisState, yFrameLock })); } catch (e) {}
+        }
+        (function loadChartPref() {
+            try {
+                const p = JSON.parse(localStorage.getItem(CHART_PREF_KEY) || 'null');
+                if (!p) return;
+                Object.keys(axisState).forEach(k => { if (p.axisState && typeof p.axisState[k] === 'boolean') axisState[k] = p.axisState[k]; });
+                if (p.yFrameLock && typeof p.yFrameLock === 'object') {
+                    Object.entries(p.yFrameLock).forEach(([ai, key]) => { if ((AXIS_SERIES[ai] || []).some(s => s.key === key)) yFrameLock[ai] = key; });
+                }
+            } catch (e) {}
+        })();
+
         const rowRanges = [
             { label: '周三晚', start: 2, end: 419, type: 'night' },
             { label: '週四早', start: 420, end: 569, type: 'day' },
@@ -801,6 +817,7 @@
 
         function toggleAxis(key) {
             axisState[key] = !axisState[key];
+            saveChartPref();
             updateChartUI();
         }
 
@@ -808,11 +825,13 @@
         function yFit(axisIdx, key) {
             if (yFrameLock[axisIdx] === key) delete yFrameLock[axisIdx];
             else yFrameLock[axisIdx] = key;
+            saveChartPref();
             buildYZoomBar();
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
         }
         function resetYZoom() {
             yFrameLock = {};
+            saveChartPref();
             buildYZoomBar();
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
         }
