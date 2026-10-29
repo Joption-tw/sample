@@ -455,7 +455,7 @@
         const AXIS_SERIES = {
             0: [{ key: 'idx', label: '期指',   arr: 'yPrice',   on: () => axisState.lIdx, color: '#2563eb' }],
             1: [{ key: 'tot', label: '總點',   arr: 'yTotal',   on: () => axisState.lTot, color: '#475569' }],
-            2: [{ key: 'prf', label: '獲利率', arr: 'yProfit',  on: () => axisState.rPrf, color: '#e11d48' }],
+            2: [{ key: 'prf', label: '獲利率', arr: 'yProfitSess', on: () => axisState.rPrf, color: '#e11d48' }],
             3: [{ key: 'wed', label: '週三',   arr: 'yTimeWed', on: () => axisState.rTmv, color: '#ef4444' },
                 { key: 'fri', label: '週五',   arr: 'yTimeFri', on: () => axisState.rTmv, color: '#10b981' }],
             4: [{ key: 'vix', label: 'VIX',    arr: 'yVix',     on: () => axisState.rVix, color: '#f59e0b' }]
@@ -775,6 +775,7 @@
                     raw[key] = applySmoothing(cleaned);
                 });
                 globalData = raw;
+                globalData.yProfitSess = buildSessionProfit();
                 globalData.yVix = buildVixSeries();
                 const checkAndInit = () => {
                     if (typeof echarts !== 'undefined') {
@@ -885,12 +886,14 @@
             const leftAxesCount = (axisState.lIdx ? 1 : 0) + (axisState.lTot ? 1 : 0);
             const rightAxesCount = (axisState.rPrf ? 1 : 0) + (axisState.rTmv ? 1 : 0) + (axisState.rVix ? 1 : 0);
             const getMarkPoint = (name, type) => {
-                if (type === 'profit') return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10, fontWeight: 'bold' }, data: [{ type: 'max', label: { color: '#22d3ee', position: 'top', formatter: '{c}%', offset: [0, -5] } }, { type: 'min', label: { color: '#ec4899', position: 'bottom', formatter: '{c}%', offset: [0, 5] } }] };
+                if (type === 'profit') return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10, fontWeight: 'bold' }, data: [{ type: 'max', label: { color: '#e11d48', position: 'top', formatter: '{c}%', offset: [0, -5] } }, { type: 'min', label: { color: '#059669', position: 'bottom', formatter: '{c}%', offset: [0, 5] } }] };
                 if (name === '期指') return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10, fontWeight: 'bold' }, data: [{ type: 'max', label: { color: '#ef4444', position: 'top', formatter: (p) => Math.round(p.value).toLocaleString() } }, { type: 'min', label: { color: '#10b981', position: 'bottom', formatter: (p) => Math.round(p.value).toLocaleString() } }] };
                 return { symbol: 'circle', symbolSize: 0, label: { show: true, fontSize: 10 }, data: [{ type: 'max', label: { color: name.includes('週三') ? '#ef4444' : (name.includes('週五') ? '#10b981' : '#64748b'), position: 'top', formatter: (p) => Math.round(p.value).toLocaleString() } }] };
             };
             const seriesConfig = [
-                { name: '獲利率', data: axisState.rPrf ? globalData.yProfit : [], markPoint: axisState.rPrf ? getMarkPoint('獲利率', 'profit') : { data: [] } },
+                { name: '_prfUp', data: axisState.rPrf ? prfUp(globalData.yProfitSess) : [] },
+                { name: '_prfDn', data: axisState.rPrf ? prfDn(globalData.yProfitSess) : [] },
+                { name: '獲利率', data: axisState.rPrf ? globalData.yProfitSess : [], markPoint: axisState.rPrf ? getMarkPoint('獲利率', 'profit') : { data: [] } },
                 { name: '週三時價', data: axisState.rTmv ? globalData.yTimeWed : [], markPoint: axisState.rTmv ? getMarkPoint('週三時價', 'val') : { data: [] } },
                 { name: '週五時價', data: axisState.rTmv ? globalData.yTimeFri : [], markPoint: axisState.rTmv ? getMarkPoint('週五時價', 'val') : { data: [] } },
                 { name: '期指', data: axisState.lIdx ? globalData.yPrice : [], markPoint: axisState.lIdx ? getMarkPoint('期指', 'idx') : { data: [] } },
@@ -914,7 +917,7 @@
                   fillerColor: 'rgba(37, 99, 235, 0.12)', borderColor: 'transparent' },
                 { type: 'slider', yAxisIndex: 0, left: 0, width: 18, show: showYSlider && axisState.lIdx },
                 { type: 'slider', yAxisIndex: 1, left: axisState.lIdx ? 40 : 0, width: 18, show: showYSlider && axisState.lTot },
-                { type: 'slider', yAxisIndex: 2, right: 0, width: 18, show: showYSlider && axisState.rPrf },
+                { type: 'slider', yAxisIndex: 2, right: 0, width: 18, show: showYSlider && axisState.rPrf, filterMode: 'none' },
                 { type: 'slider', yAxisIndex: 3, right: axisState.rPrf ? 40 : 0, width: 18, show: showYSlider && axisState.rTmv },
                 { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile }
             ];
@@ -922,6 +925,30 @@
             const gridR = isMobile ? (rightAxesCount * 42 + 4) : (rightAxesCount * 55 + 15);
             myChart.setOption({ textStyle: { fontFamily: 'Arial' }, grid: { left: gridL, right: gridR, top: isMobile ? 14 : '8%', bottom: isMobile ? 28 : '15%' }, yAxis: yAxes, dataZoom: dZoom, series: seriesConfig.map(s => ({ name: s.name, data: s.data, markPoint: s.markPoint })) });
             if (currentSessionIdx !== -1) selectSession(currentSessionIdx);
+        }
+
+        // ── 獲利曲線：每盤從 0 起算（本盤獲利率 = 累計值 − 上一盤收盤值，與每盤績效表同基準）──
+        // 獲利曲線面積：賺錢（>0）淡粉紅、賠錢（<0）淡綠，各畫一層並以 0 截斷
+        const prfUp = arr => arr.map(v => v === null ? null : Math.max(v, 0));
+        const prfDn = arr => arr.map(v => v === null ? null : Math.min(v, 0));
+
+        function buildSessionProfit() {
+            const out = new Array(globalData.x.length).fill(null);
+            let prevEnd = null;
+            rowRanges.forEach((r, idx) => {
+                const { si, ei } = sessionBounds(idx);
+                if (si >= out.length) return;
+                let base = prevEnd, last = null;
+                for (let i = si; i <= ei; i++) {
+                    const v = globalData.yProfit[i];
+                    if (v === null || v === undefined || globalData.yProfitRaw[i] === null) continue;
+                    if (base === null) base = v;
+                    out[i] = +(v - base).toFixed(4);
+                    last = v;
+                }
+                if (last !== null) prevEnd = last;
+            });
+            return out;
         }
 
         function sessionBounds(idx) {
@@ -1099,7 +1126,8 @@
             document.getElementById('stat-swing').innerText = Math.round(swingVal).toLocaleString();
 
             document.getElementById('stat-profit').innerText = spr.length > 0 ? `${spr[spr.length - 1].toFixed(2)}%` : "--%";
-            const sessionPerf = spr.length > 0 ? (spr[spr.length - 1] - spr[0]) : 0;
+            const sps = globalData.yProfitSess.slice(si, ei + 1).filter(v => v !== null);
+            const sessionPerf = sps.length > 0 ? sps[sps.length - 1] : 0;
             const perfEl = document.getElementById('stat-max');
             perfEl.innerText = `${sessionPerf.toFixed(2)}%`;
             perfEl.className = `text-base sm:text-lg font-black stat-value ${sessionPerf >= 0 ? 'text-rose-600' : 'text-emerald-600'}`;
@@ -1178,7 +1206,7 @@
                     formatter: function(params) {
                         let res = `<div class="font-bold mb-1">${params[0].axisValue}</div>`;
                         let hasVal = false;
-                        params.forEach(p => { if (p.value === null || p.value === undefined || (Array.isArray(p.data) && p.data.length === 0)) return; let val = p.value; if (p.seriesName === '獲利率') val = val.toFixed(2) + '%'; else if (p.seriesName === 'VIX') val = val.toFixed(2); else val = Math.round(val).toLocaleString(); res += `<div class="flex justify-between gap-4 mt-0.5"><span>${p.marker} ${p.seriesName}</span><span class="font-bold">${val}</span></div>`; hasVal = true; });
+                        params.forEach(p => { if (p.seriesName.startsWith('_') || p.value === null || p.value === undefined || (Array.isArray(p.data) && p.data.length === 0)) return; let val = p.value; if (p.seriesName === '獲利率') val = val.toFixed(2) + '%'; else if (p.seriesName === 'VIX') val = val.toFixed(2); else val = Math.round(val).toLocaleString(); res += `<div class="flex justify-between gap-4 mt-0.5"><span>${p.marker} ${p.seriesName}</span><span class="font-bold">${val}</span></div>`; hasVal = true; });
                         return hasVal ? res : "";
                     }
                 },
@@ -1187,7 +1215,9 @@
                 dataZoom: [ { type: 'slider', xAxisIndex: 0 }, { type: 'slider', yAxisIndex: 0, show: false }, { type: 'slider', yAxisIndex: 1, show: false }, { type: 'slider', yAxisIndex: 2, show: false }, { type: 'slider', yAxisIndex: 3, show: false }, { type: 'inside', xAxisIndex: 0 } ],
                 series: [
                     { type: 'line', data: [], markArea: { silent: true, data: markAreas }, silent: true },
-                    { name: '獲利率', type: 'line', yAxisIndex: 2, data: data.yProfit, smooth: true, showSymbol: false, lineStyle: { width: 0 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(225, 29, 72, 0.7)' }, { offset: 1, color: 'rgba(225, 29, 72, 0.05)' }]) }, z: 1 },
+                    { name: '獲利率', type: 'line', yAxisIndex: 2, data: data.yProfitSess, smooth: true, showSymbol: false, lineStyle: { width: 0 }, z: 1 },
+                    { name: '_prfUp', type: 'line', yAxisIndex: 2, data: prfUp(data.yProfitSess), smooth: true, showSymbol: false, silent: true, lineStyle: { width: 0 }, areaStyle: { color: 'rgba(251, 113, 133, 0.2)', opacity: 1 }, z: 1 },
+                    { name: '_prfDn', type: 'line', yAxisIndex: 2, data: prfDn(data.yProfitSess), smooth: true, showSymbol: false, silent: true, lineStyle: { width: 0 }, areaStyle: { color: 'rgba(52, 211, 153, 0.2)', opacity: 1 }, z: 1 },
                     { name: '週三時價', type: 'line', yAxisIndex: 3, data: data.yTimeWed, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#ef4444', shadowBlur: 3 }, z: 4 },
                     { name: '週五時價', type: 'line', yAxisIndex: 3, data: data.yTimeFri, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#10b981', shadowBlur: 3 }, z: 4 },
                     { name: '期指', type: 'line', yAxisIndex: 0, data: data.yPrice, smooth: true, showSymbol: false, lineStyle: { width: 2.2, color: '#2563eb', shadowBlur: 3 }, z: 5 },
