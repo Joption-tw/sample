@@ -523,6 +523,20 @@
             return { si: newSi, ei: newEi };
         }
 
+        // 期指跳價過濾：深夜成交清淡時試算表偶有離譜報價（例如 46,074 → 48,050 → 46,074）
+        // 每筆與前後各 3 筆（共 7 筆）的中位數比較，差超過 150 點就換成中位數；真實的連續走勢與跳空不受影響
+        function despikePrice(arr, k = 3, threshold = 150) {
+            const idx = [];
+            arr.forEach((p, i) => { if (p !== null) idx.push(i); });
+            const out = [...arr];
+            idx.forEach((i, j) => {
+                const w = idx.slice(Math.max(0, j - k), j + k + 1).map(x => arr[x]).sort((a, b) => a - b);
+                const m = w.length % 2 ? w[(w.length - 1) / 2] : (w[w.length / 2 - 1] + w[w.length / 2]) / 2;
+                if (Math.abs(arr[i] - m) > threshold) out[i] = m;
+            });
+            return out;
+        }
+
         function calculateSwing100(prices, threshold = 100) {
             const valid = prices.filter(p => p !== null);
             if (valid.length < 2) return 0;
@@ -769,6 +783,8 @@
                         raw.yTotalRaw.push(totalPoint);
                     }
                 }
+                raw.yPriceClean = despikePrice(raw.yPriceRaw);
+                raw.yPrice = [...raw.yPriceClean];
                 ['yPrice', 'yProfit', 'yTimeWed', 'yTimeFri', 'yTotal'].forEach(key => {
                     let cleaned = [...raw[key]];
                     for (let i = 1; i < cleaned.length - 1; i++) {
@@ -1054,24 +1070,20 @@
                 prevEnd = { p: pE, f: feeCum[ei] };
                 latestIdx = i;
 
-                let entry = null, exit = null;
+                // 同一盤可能多次進出：進場 = 第一次進場、出場 = 最後一次出場（仍持倉則為 null）
+                // 進場百點震幅：每段持倉各算一次再加總（空手時的震盪不算）
+                const swingIn = (a, b) => calculateSwing100(globalData.yPriceClean.slice(a, b + 1), 100);
+                let entry = null, exit = null, inSwing = 0, segStart = null;
                 for (let k = si; k <= ei; k++) {
                     const t = globalData.yTotalRaw[k];
-                    if (entry === null) { if (t !== 0 && t !== null) entry = k; }
-                    else if (t === 0) { exit = k; break; }
+                    if (segStart === null) {
+                        if (t !== 0 && t !== null) { segStart = k; if (entry === null) entry = k; }
+                    } else if (t === 0) { inSwing += swingIn(segStart, k); exit = k; segStart = null; }
                 }
-                // 進場百點震幅：同一盤可能多次進出，每段持倉各算一次再加總（空手時的震盪不算）
-                const swingIn = (a, b) => calculateSwing100(globalData.yPriceRaw.slice(a, b + 1), 100);
-                let inSwing = 0, segStart = null;
-                for (let k = si; k <= ei; k++) {
-                    const t = globalData.yTotalRaw[k];
-                    if (segStart === null) { if (t !== 0 && t !== null) segStart = k; }
-                    else if (t === 0) { inSwing += swingIn(segStart, k); segStart = null; }
-                }
-                if (segStart !== null) inSwing += swingIn(segStart, ei);
+                if (segStart !== null) { inSwing += swingIn(segStart, ei); exit = null; }
                 return {
                     rate: pE - pB, lots: Math.round(fee / FEE_PER_LOT), cum: pE, entry, exit,
-                    swing: Math.round(calculateSwing100(globalData.yPriceRaw.slice(si, ei + 1), 100)),
+                    swing: Math.round(calculateSwing100(globalData.yPriceClean.slice(si, ei + 1), 100)),
                     inSwing: Math.round(inSwing),
                     ba: lastChg(globalData.yTimeWed, si, ei), bb: lastChg(globalData.yTimeFri, si, ei),
                     vix: hasVix ? vixOfDay(sessionDate(i)) : null
@@ -1147,7 +1159,7 @@
             if (si >= globalData.x.length) return;
 
             const sx = globalData.x.slice(si, ei + 1);
-            const spRaw = globalData.yPriceRaw.slice(si, ei + 1);
+            const spRaw = globalData.yPriceClean.slice(si, ei + 1);
             const spr = globalData.yProfit.slice(si, ei + 1).filter(v => v !== null);
             const sw = globalData.yTimeWed.slice(si, ei + 1).filter(v => v !== null);
             const sf = globalData.yTimeFri.slice(si, ei + 1).filter(v => v !== null);
@@ -1183,12 +1195,13 @@
             renderChg('stat-wed-chg', calcChg(globalData.yTimeWed.slice(si, ei + 1)));
             renderChg('stat-fri-chg', calcChg(globalData.yTimeFri.slice(si, ei + 1)));
 
-            let entry = "--", exit = "--";
-            for(let i=0; i<stRaw.length; i++) { if(stRaw[i] !== 0 && stRaw[i] !== null) { entry = sx[i].split(' ')[1] || sx[i]; break; } }
-            if(entry !== "--") {
-                let hasEntry = false;
-                for(let i=0; i<stRaw.length; i++) { if(!hasEntry && stRaw[i] !== 0 && stRaw[i] !== null) { hasEntry = true; continue; } if(hasEntry && stRaw[i] === 0) { exit = sx[i].split(' ')[1] || sx[i]; break; } }
+            // 進場 = 第一次進場、出場 = 最後一次出場；仍持倉顯示「持倉中」
+            let entry = "--", exit = "--", holding = false;
+            for(let i=0; i<stRaw.length; i++) {
+                if(stRaw[i] !== 0 && stRaw[i] !== null) { if(entry === "--") entry = sx[i].split(' ')[1] || sx[i]; holding = true; }
+                else if(holding && stRaw[i] === 0) { exit = sx[i].split(' ')[1] || sx[i]; holding = false; }
             }
+            if(holding) exit = "持倉中";
             document.getElementById('stat-entry').innerText = entry;
             document.getElementById('stat-exit').innerText = exit;
 
