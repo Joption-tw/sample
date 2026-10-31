@@ -7,8 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <style>
         body {
             background-color: #f8fafc;
@@ -94,7 +92,7 @@
         .live-indicator { animation: pulse-soft 2s infinite; }
 
         /* 個別 Y 軸縮放控制（電腦 / 手機皆適用；同時兼作圖例） */
-        #refresh-btn, button[onclick="takeScreenshot()"] { touch-action: manipulation; }
+        #line-contact { touch-action: manipulation; }
         #dynamic-legend { display: none !important; }   /* 改由下方色塊藥丸鈕兼作圖例 */
 
         #y-zoom-mobile {
@@ -159,12 +157,9 @@
             header h1 { font-size: 0.85rem !important; line-height: 1.05 !important; margin: 0 !important; }
             header > div:nth-child(2) > div { display: none !important; }   /* 隱藏 示範帳戶/版本/LIVE 那一列 */
             header > div:last-child { flex: 0 0 auto !important; width: auto !important; }
-            .flex.flex-row.sm\:flex-col { flex-direction: row !important; gap: 6px !important; min-width: 0 !important; width: auto !important; }
-            /* 截圖分享 / 同步數據：加大觸控範圍，好按 */
-            header #refresh-btn, header button[onclick="takeScreenshot()"] {
-                padding: 6px 12px !important; font-size: 10px !important; min-height: 30px !important;
-                border-radius: 8px !important; gap: 4px !important; }
-            header #refresh-btn i, header button[onclick="takeScreenshot()"] i { width: 13px !important; height: 13px !important; }
+            /* LINE 聯繫：橫向時只留按鈕，QR 碼收起來 */
+            header #line-contact { padding: 6px 12px !important; min-height: 30px !important; border-radius: 8px !important; }
+            header #line-contact .line-qr, header #line-contact .line-sub { display: none !important; }
 
             /* 七張統計卡一整排：壓到最扁，數字為主 */
             [class*="lg:grid-cols-7"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: 3px !important; }
@@ -237,14 +232,14 @@
                 <div class="text-right hidden lg:block mr-2">
                     <p id="update-time" class="text-[11px] font-bold text-slate-400 font-sans tracking-tighter">--/-- --:--:--</p>
                 </div>
-                <div class="flex flex-row sm:flex-col gap-2 w-full sm:w-auto sm:min-w-[110px]">
-                    <button id="refresh-btn" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-lg font-bold text-[11px] sm:text-xs transition-all shadow-sm">
-                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 同步數據
-                    </button>
-                    <button onclick="takeScreenshot()" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg font-bold text-[11px] sm:text-xs transition-all shadow-sm">
-                        <i data-lucide="camera" class="w-3.5 h-3.5"></i> 截圖分享
-                    </button>
-                </div>
+                <a id="line-contact" href="https://tinyurl.com/Joption-line" target="_blank" rel="noopener" title="掃描 QR 碼或點擊，加入 LINE 社群" class="w-full sm:w-auto flex items-center justify-center gap-2 sm:gap-2.5 px-3 py-2 sm:p-1.5 sm:pr-3 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white rounded-lg transition-all shadow-sm">
+                    <svg class="line-qr hidden sm:block w-[88px] h-[88px] bg-white rounded" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 37 37" shape-rendering="crispEdges" role="img" aria-label="LINE QR 碼"><path stroke="#0f172a" d="M4 4.5h7m6 0h3m1 0h1m4 0h7m-29 1h1m5 0h1m1 0h5m2 0h1m2 0h1m1 0h1m1 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m1 0h5m1 0h1m1 0h1m1 0h3m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m1 0h5m1 0h2m1 0h1m1 0h2m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m3 0h6m3 0h2m1 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m2 0h1m1 0h4m1 0h1m5 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-21 1h2m2 0h2m4 0h2m-20 1h1m5 0h1m1 0h2m1 0h1m2 0h2m1 0h1m1 0h1m1 0h2m2 0h3m-27 1h1m1 0h2m3 0h3m3 0h1m2 0h2m2 0h1m1 0h2m1 0h2m-28 1h2m2 0h1m1 0h3m2 0h1m6 0h1m1 0h1m2 0h2m-24 1h1m5 0h2m2 0h2m1 0h3m2 0h3m3 0h1m-20 1h1m1 0h1m4 0h2m1 0h1m3 0h1m1 0h1m5 0h1m-29 1h1m1 0h1m1 0h1m2 0h1m1 0h1m1 0h4m2 0h3m1 0h4m2 0h2m-27 1h1m2 0h2m3 0h2m1 0h3m1 0h1m2 0h2m3 0h2m-27 1h2m1 0h3m2 0h1m4 0h2m1 0h1m6 0h1m2 0h1m1 0h1m-28 1h4m1 0h2m1 0h3m2 0h2m1 0h1m1 0h1m5 0h2m-27 1h1m1 0h1m1 0h1m3 0h1m1 0h1m1 0h1m4 0h4m1 0h3m1 0h3m-29 1h2m2 0h6m3 0h3m3 0h1m4 0h2m2 0h1m-29 1h1m1 0h2m1 0h1m1 0h2m1 0h2m2 0h1m1 0h1m1 0h3m-21 1h1m3 0h3m1 0h2m1 0h2m2 0h1m1 0h8m1 0h3m-21 1h3m1 0h2m1 0h1m1 0h2m1 0h1m3 0h2m-26 1h7m3 0h1m1 0h4m3 0h2m1 0h1m1 0h3m-27 1h1m5 0h1m6 0h1m1 0h2m2 0h2m3 0h1m-25 1h1m1 0h3m1 0h1m2 0h1m1 0h3m2 0h1m2 0h7m1 0h2m-29 1h1m1 0h3m1 0h1m2 0h1m2 0h1m2 0h6m4 0h2m1 0h1m-29 1h1m1 0h3m1 0h1m2 0h5m1 0h2m4 0h7m-28 1h1m5 0h1m2 0h6m1 0h1m1 0h1m2 0h1m2 0h3m1 0h1m-29 1h7m1 0h2m7 0h1m1 0h1m1 0h6"/></svg>
+                    <span class="flex flex-col gap-0.5 text-center sm:text-left">
+                        <span class="inline-flex items-center justify-center sm:justify-start gap-1.5 text-[11px] sm:text-sm font-black whitespace-nowrap"><i data-lucide="message-circle" class="w-3.5 h-3.5"></i> LINE 聯繫歐大</span>
+                        <span class="line-sub hidden sm:block text-[10px] font-bold whitespace-nowrap">歐伯供選擇權大小事 社群</span>
+                        <span class="line-sub hidden sm:block text-[10px] font-bold whitespace-nowrap">掃描或點擊加入</span>
+                    </span>
+                </a>
             </div>
         </header>
 
@@ -599,118 +594,6 @@
         function fmtMin(totalMins) {
             const m = ((totalMins % 1440) + 1440) % 1440;
             return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-        }
-
-        async function exportExcel() {
-            if (!globalData || currentSessionIdx === -1) return;
-            const r = rowRanges[currentSessionIdx];
-            const rawSi = r.start - 2;
-            const rawEi = Math.min(r.end - 2, globalData.x.length - 1);
-            if (rawSi >= globalData.x.length) return;
-            const { si, ei } = trimSessionByTime(rawSi, rawEi, r.type);
-
-            const labels   = globalData.x.slice(si, ei + 1);
-            const price    = globalData.yPrice.slice(si, ei + 1);
-            const priceRaw = globalData.yPriceRaw.slice(si, ei + 1);
-            const profit   = globalData.yProfit.slice(si, ei + 1);
-            const wed      = globalData.yTimeWed.slice(si, ei + 1);
-            const fri      = globalData.yTimeFri.slice(si, ei + 1);
-            const total    = globalData.yTotal.slice(si, ei + 1);
-            const totalRaw = globalData.yTotalRaw.slice(si, ei + 1);
-
-            const now = new Date(); const pad = n => n.toString().padStart(2, '0');
-            const ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
-            const sessionLabel = rowRanges[currentSessionIdx].label;
-
-            const wb = new ExcelJS.Workbook();
-            wb.creator = 'Joption';
-            wb.created = now;
-
-            const hdrStyle = { font: { bold: true, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }, alignment: { horizontal: 'center' } };
-            function applyHeader(ws, cols) {
-                const row = ws.addRow(cols);
-                row.eachCell(c => { c.font = hdrStyle.font; c.fill = hdrStyle.fill; c.alignment = hdrStyle.alignment; });
-                row.height = 18;
-            }
-            function setColWidths(ws, widths) {
-                widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-            }
-
-            const ws1 = wb.addWorksheet('原始資料');
-            applyHeader(ws1, ['時間', '期指(原始)', '期指(平滑)', '獲利率%', '週三時價', '週五時價', '總點數(原始)', '總點數(平滑)']);
-            setColWidths(ws1, [12, 12, 12, 10, 10, 10, 14, 14]);
-            for (let i = 0; i < labels.length; i++) {
-                ws1.addRow([labels[i], priceRaw[i] ?? null, price[i] ?? null, profit[i] ?? null, wed[i] ?? null, fri[i] ?? null, totalRaw[i] ?? null, total[i] ?? null]);
-            }
-
-            const mins = [];
-            let prevMin = null;
-            for (let i = 0; i < labels.length; i++) {
-                const m = parseMinutes(labels[i], prevMin);
-                mins.push(m);
-                if (m !== null) prevMin = m;
-            }
-            const validMins = mins.filter(v => v !== null);
-            if (validMins.length >= 2) {
-                const ws2 = wb.addWorksheet('每分鐘內插');
-                applyHeader(ws2, ['時間', '期指(原始)', '期指(平滑)', '獲利率%', '週三時價', '週五時價', '總點數']);
-                setColWidths(ws2, [10, 12, 12, 10, 10, 10, 12]);
-                const minT = validMins[0], maxT = validMins[validMins.length - 1];
-                for (let t = minT; t <= maxT; t++) {
-                    const v = (arr, dp) => { const r = lerp(mins, arr, t); return r !== null ? +r.toFixed(dp) : null; };
-                    ws2.addRow([fmtMin(t), v(priceRaw,1), v(price,1), v(profit,4), v(wed,0), v(fri,0), v(total,1)]);
-                }
-            }
-
-            if (myChart) {
-                try {
-                    const dataUrl = myChart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#f8fafc' });
-                    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-                    const ws3 = wb.addWorksheet('績效圖');
-                    ws3.getCell('A1').value = `${sessionLabel} 績效圖表`;
-                    ws3.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF1E3A5F' } };
-                    const imgId = wb.addImage({ base64, extension: 'png' });
-                    ws3.addImage(imgId, { tl: { col: 0, row: 1 }, ext: { width: 1100, height: 550 } });
-                    ws3.getColumn(1).width = 15;
-                } catch (e) { console.warn('圖表嵌入失敗', e); }
-            }
-
-            const buf = await wb.xlsx.writeBuffer();
-            const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `雙賣平衡_${sessionLabel}_${ts}.xlsx`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        async function takeScreenshot() {
-            const root = document.getElementById('capture-root');
-            const loading = document.getElementById('loading-overlay');
-            const msgEl = document.getElementById('loading-msg');
-            const isMobile = window.innerWidth < 768;
-            loading.classList.remove('hidden'); loading.style.opacity = '1';
-            msgEl.innerText = "正在生成高品質報表...";
-            try {
-                await new Promise(r => setTimeout(r, 500));
-                const canvas = await html2canvas(root, {
-                    useCORS: true, backgroundColor: '#f8fafc', scale: isMobile ? 3 : 4, logging: false,
-                    onclone: (clonedDoc) => {
-                        const clonedRoot = clonedDoc.getElementById('capture-root');
-                        clonedRoot.style.width = isMobile ? "1200px" : "1600px";
-                        clonedRoot.style.margin = "0 auto";
-                        clonedDoc.getElementById('loading-overlay').style.display = 'none';
-                    }
-                });
-                const now = new Date(); const pad = (n) => n.toString().padStart(2, '0');
-                const timeStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-                const link = document.createElement('a');
-                link.download = `雙賣平衡績效_${timeStr}.jpg`;
-                link.href = canvas.toDataURL('image/jpeg', 0.95);
-                link.click();
-                try { await exportExcel(); } catch(exErr) { console.warn("Excel 匯出失敗", exErr); }
-            } catch (e) { console.error("截圖失敗", e); }
-            finally { loading.style.opacity = '0'; setTimeout(() => { loading.classList.add('hidden'); msgEl.innerText = "數據同步處理中"; }, 300); }
         }
 
         function getAutoSessionIndex() {
@@ -1503,7 +1386,6 @@
             loadWeekList();
             fetchVisits();
             loadVix();
-            document.getElementById('refresh-btn').onclick = () => { fetchData(); loadVix(); };
             window.addEventListener('resize', () => { if(myChart) myChart.resize(); updateChartUI(); });
         };
     </script>
