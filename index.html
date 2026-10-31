@@ -2,7 +2,22 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        // 手機直向：整份排成一頁（用電腦版版面寬 1040 排好，再縮到螢幕寬，可雙指放大）；手機橫向：一般寬度 + 兩頁（見下方 CSS）
+        (function () {
+            const meta = document.querySelector('meta[name="viewport"]');
+            const portrait = matchMedia('(orientation: portrait)');
+            const side = Math.min(screen.width, screen.height);
+            function apply() {
+                const on = side < 600 && portrait.matches;
+                document.documentElement.classList.toggle('m-portrait', on);
+                meta.setAttribute('content', on ? `width=1040, initial-scale=${(side / 1040).toFixed(3)}, minimum-scale=${(side / 1040).toFixed(3)}, maximum-scale=6` : 'width=device-width, initial-scale=1.0');
+            }
+            apply();
+            portrait.addEventListener('change', apply);
+        })();
+    </script>
     <title>雙賣平衡 即時績效 (歐大專業版) - V1.9.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
@@ -132,6 +147,16 @@
         }
 
         /* ===== 手機橫向（打橫）：資料填滿整個可視畫面，完全不捲動、不被瀏覽器列遮住 ===== */
+        /* 手機換頁：直向一頁（圖表撐滿剩餘高度）；換頁按鈕只在手機橫向出現 */
+        #page-btn { display: none; }
+        html.m-portrait body { padding: 4px; }
+        html.m-portrait #capture-root { min-height: calc(100vh - 8px); min-height: calc(100svh - 8px); display: flex; flex-direction: column; }
+        html.m-portrait #capture-root > * { flex: 0 0 auto; }
+        html.m-portrait #capture-root > .glass-card.p-2 { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+        html.m-portrait #performance-chart { flex: 1 1 auto; height: auto !important; min-height: 340px; }
+        html.m-portrait #links-card .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        html.m-portrait #session-table-card th, html.m-portrait #session-table-card td { padding-left: 4px !important; padding-right: 4px !important; }
+
         @media (orientation: landscape) and (max-height: 600px) {
             html, body { height: 100%; overflow: hidden !important; }
             body { padding: 3px !important; }
@@ -165,9 +190,9 @@
             header #line-contact .line-qr, header #line-contact .line-sub { display: none !important; }
 
             /* 七張統計卡一整排：壓到最扁，數字為主 */
-            [class*="lg:grid-cols-7"] { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; gap: 3px !important; }
-            [class*="lg:grid-cols-7"] .glass-card { min-height: 0 !important; padding: 1px 4px !important; border-left-width: 3px !important; }
-            [class*="lg:grid-cols-7"] .glass-card p:first-child { font-size: 7px !important; line-height: 1.1 !important; margin: 0 !important; }
+            #capture-root > [class*="lg:grid-cols-"] { grid-template-columns: none !important; grid-auto-flow: column !important; grid-auto-columns: minmax(0, 1fr) !important; gap: 3px !important; }
+            #capture-root > [class*="lg:grid-cols-"] .glass-card { min-height: 0 !important; padding: 1px 4px !important; border-left-width: 3px !important; }
+            #capture-root > [class*="lg:grid-cols-"] .glass-card p:first-child { font-size: 7px !important; line-height: 1.1 !important; margin: 0 !important; }
             #capture-root .stat-value { font-size: 11px !important; line-height: 1.15 !important; }
             #stat-wed-chg, #stat-fri-chg { font-size: 7px !important; line-height: 1 !important; margin-top: 0 !important;
                                            white-space: nowrap !important; overflow: hidden !important; }
@@ -202,6 +227,12 @@
 
             /* 頁尾、每盤績效表在橫向時隱藏，把空間全留給圖表 */
             footer, #session-table-card, #links-card { display: none !important; }
+
+            /* 第 2 頁：每盤績效表、相關連結（第 1 頁是圖表） */
+            #page-btn { display: inline-flex !important; }
+            body.m-page-2 #capture-root { overflow-y: auto !important; }
+            body.m-page-2 #capture-root > *:not(header) { display: none !important; }
+            body.m-page-2 #capture-root > #session-table-card, body.m-page-2 #capture-root > #links-card { display: block !important; }
         }
     </style>
 </head>
@@ -248,6 +279,7 @@
                         <span class="line-sub hidden lg:block text-[10px] font-bold text-slate-500 whitespace-nowrap">掃描或點擊加好友</span>
                     </span>
                 </a>
+                <button id="page-btn" type="button" onclick="setMobilePage(document.body.classList.contains('m-page-2') ? 1 : 2)" class="items-center gap-1 ml-2 px-3 min-h-[30px] bg-slate-800 active:scale-95 text-white rounded-lg text-[11px] font-black whitespace-nowrap">下一頁 ▶</button>
             </div>
         </header>
 
@@ -526,9 +558,10 @@
             return { si: newSi, ei: newEi };
         }
 
-        // 期指跳價過濾：深夜成交清淡時試算表偶有離譜報價（例如 46,074 → 48,050 → 46,074）
-        // 每筆與前後各 3 筆（共 7 筆）的中位數比較，差超過 150 點就換成中位數；真實的連續走勢與跳空不受影響
-        function despikePrice(arr, k = 3, threshold = 150) {
+        // 期指跳價過濾：深夜成交清淡時試算表常有壞報價（例如 46,074 → 48,050 → 46,074），參數用期交所 TX 成交比對過
+        // 1. 每筆與前後各 3 筆（共 7 筆）的中位數比較，差超過 120 點就換成中位數
+        // 2. 連續幾筆一起跳開：跳離超過 120 點、6 筆內又回到起跳點 100 點內，這段視為壞報價
+        function despikePrice(arr, k = 3, threshold = 120, jump = 120, back = 100, maxLen = 6) {
             const idx = [];
             arr.forEach((p, i) => { if (p !== null) idx.push(i); });
             const out = [...arr];
@@ -537,7 +570,23 @@
                 const m = w.length % 2 ? w[(w.length - 1) / 2] : (w[w.length / 2 - 1] + w[w.length / 2]) / 2;
                 if (Math.abs(arr[i] - m) > threshold) out[i] = m;
             });
+            for (let j = 1; j < idx.length; j++) {
+                const base = out[idx[j - 1]];
+                if (Math.abs(out[idx[j]] - base) <= jump) continue;
+                for (let e = j + 1; e <= Math.min(j + maxLen, idx.length - 1); e++) {
+                    if (Math.abs(out[idx[e]] - base) <= back) {
+                        for (let f = j; f < e; f++) out[idx[f]] = base;
+                        j = e;
+                        break;
+                    }
+                }
+            }
             return out;
+        }
+
+        function clockMins(v) {
+            const m = (v || '').match(/^(\d{1,2}):(\d{2})/);
+            return m ? +m[1] * 60 + +m[2] : null;
         }
 
         function calculateSwing100(prices, threshold = 100) {
@@ -652,11 +701,12 @@
                 if (!response.ok) throw new Error(`資料讀取失敗：${response.status}`);
                 const text = await response.text();
                 const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-                const raw = { x: [], yPrice: [], yProfit: [], yTimeWed: [], yTimeFri: [], yTotal: [], yTotalRaw: [], yPriceRaw: [], yProfitRaw: [], yFeeRaw: [] };
+                const raw = { x: [], yClock: [], yPrice: [], yProfit: [], yTimeWed: [], yTimeFri: [], yTotal: [], yTotalRaw: [], yPriceRaw: [], yProfitRaw: [], yFeeRaw: [] };
                 for (let i = 1; i < lines.length; i++) {
                     const cols = parseCSVLine(lines[i]);
                     if (cols.length >= 54) {
                         raw.x.push(cols[0]);
+                        raw.yClock.push(rawNumeric(cols[8]) !== null ? clockMins(cols[2]) : null);
                         const p = rawNumeric(cols[22]);
                         raw.yPriceRaw.push(p);
                         raw.yPrice.push(p);
@@ -863,6 +913,19 @@
             return out;
         }
 
+        // 百點震幅的範圍：時間標籤比實際時間晚 1～2 分，開盤前最後一筆會被算進去（等於把隔夜跳空算成震幅），所以用「更新時間」切盤
+        function clockRange(idx) {
+            const r = rowRanges[idx];
+            const inSession = m => m !== null && (r.type === 'day' ? m >= 525 && m <= 825 : m >= 900 || m <= 300);
+            const lo = r.start - 2, hi = Math.min(r.end, globalData.x.length - 1);
+            let si = -1, ei = -1;
+            for (let i = lo; i <= hi; i++) {
+                if (inSession(globalData.yClock[i])) { if (si === -1) si = i; ei = i; }
+            }
+            return si === -1 ? null : { si, ei };
+        }
+        const swingBounds = idx => clockRange(idx) || sessionBounds(idx);
+
         function sessionBounds(idx) {
             const r = rowRanges[idx];
             const rawSi = r.start - 2;
@@ -893,7 +956,7 @@
         function lastSessionWithData() {
             for (let i = rowRanges.length - 1; i >= 0; i--) {
                 const { si, ei } = sessionBounds(i);
-                if (si < globalData.x.length && globalData.yProfitRaw.slice(si, ei + 1).some(v => v !== null)) return i;
+                if (clockRange(i) && si < globalData.x.length && globalData.yProfitRaw.slice(si, ei + 1).some(v => v !== null)) return i;
             }
             return -1;
         }
@@ -953,7 +1016,7 @@
             let sumLots = 0, cumRate = null, win = 0, lose = 0, done = 0;
             const stats = rowRanges.map((r, i) => {
                 const { si, ei } = sessionBounds(i);
-                if (si >= n) return null;
+                if (si >= n || !clockRange(i)) return null;   // 週六凌晨最後兩筆標籤是「一 8:45」，不算週一開盤
                 const pE = lastAt(globalData.yProfitRaw, ei, si);
                 if (pE === null) return null;
                 const pB = prevEnd ? prevEnd.p : firstIn(globalData.yProfitRaw, si, ei);
@@ -974,7 +1037,7 @@
                 if (segStart !== null) { inSwing += swingIn(segStart, ei); exit = null; }
                 return {
                     rate: pE - pB, lots: Math.round(fee / FEE_PER_LOT), cum: pE, entry, exit,
-                    swing: Math.round(calculateSwing100(globalData.yPriceClean.slice(si, ei + 1), 100)),
+                    swing: (b => Math.round(calculateSwing100(globalData.yPriceClean.slice(b.si, b.ei + 1), 100)))(swingBounds(i)),
                     inSwing: Math.round(inSwing),
                     ba: lastChg(globalData.yTimeWed, si, ei), bb: lastChg(globalData.yTimeFri, si, ei),
                     vix: hasVix ? vixOfDay(sessionDate(i)) : null
@@ -1042,7 +1105,15 @@
             }
         }
 
+        function setMobilePage(n) {
+            document.body.classList.toggle('m-page-2', n === 2);
+            document.getElementById('page-btn').innerText = n === 2 ? '◀ 上一頁' : '下一頁 ▶';
+            document.getElementById('capture-root').scrollTop = 0;
+            if (n === 1 && myChart) myChart.resize();
+        }
+
         function selectSession(idx) {
+            if (document.body.classList.contains('m-page-2')) setMobilePage(1);   // 在第 2 頁點某一盤 → 回圖表
             if (!globalData || idx === -1 || !myChart) return;
             currentSessionIdx = idx;
             document.querySelectorAll('.session-btn').forEach((btn, i) => btn.classList.toggle('active', i === idx));
@@ -1056,7 +1127,8 @@
             const sf = globalData.yTimeFri.slice(si, ei + 1).filter(v => v !== null);
             const stRaw = globalData.yTotalRaw.slice(si, ei + 1);
 
-            const swingVal = calculateSwing100(spRaw, 100);
+            const sb = swingBounds(idx);
+            const swingVal = calculateSwing100(globalData.yPriceClean.slice(sb.si, sb.ei + 1), 100);
             document.getElementById('stat-swing').innerText = Math.round(swingVal).toLocaleString();
 
             document.getElementById('stat-profit').innerText = spr.length > 0 ? `${spr[spr.length - 1].toFixed(2)}%` : "--%";
@@ -1395,6 +1467,8 @@
             fetchVisits();
             loadVix();
             window.addEventListener('resize', () => { if(myChart) myChart.resize(); updateChartUI(); });
+            const chartBox = document.getElementById('performance-chart');
+            new ResizeObserver(() => { if (myChart && chartBox.clientWidth) myChart.resize(); }).observe(chartBox);
         };
     </script>
 </body>
