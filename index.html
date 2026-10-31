@@ -926,6 +926,13 @@
         }
         const swingBounds = idx => clockRange(idx) || sessionBounds(idx);
 
+        // 進出場時間顯示試算表的「更新時間」（實際時間）；沒有時才退回時間標籤
+        function clockText(k) {
+            const m = globalData.yClock[k];
+            if (m === null || m === undefined) { const s = globalData.x[k] || ''; return s.split(' ')[1] || s; }
+            return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+        }
+
         function sessionBounds(idx) {
             const r = rowRanges[idx];
             const rawSi = r.start - 2;
@@ -984,7 +991,6 @@
 
             const lastAt = (arr, i, from = 0) => { for (let k = Math.min(i, n - 1); k >= from; k--) if (arr[k] !== null) return arr[k]; return null; };
             const firstIn = (arr, a, b) => { for (let k = a; k <= b; k++) if (arr[k] !== null) return arr[k]; return null; };
-            const timeOf = k => { const s = globalData.x[k] || ''; return s.split(' ')[1] || s; };
             const dateOf = i => { const d = sessionDate(i); return d ? `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, '0')}` : '--'; };
             // 與卡片相同：取區間內第一個 / 最後一個非 0 值算漲跌
             const lastChg = (arr, si, ei) => {
@@ -1027,14 +1033,15 @@
                 // 同一盤可能多次進出：進場 = 第一次進場、出場 = 最後一次出場（仍持倉則為 null）
                 // 進場百點震幅：每段持倉各算一次再加總（空手時的震盪不算）
                 const swingIn = (a, b) => calculateSwing100(globalData.yPriceClean.slice(a, b + 1), 100);
+                const tb = swingBounds(i);
                 let entry = null, exit = null, inSwing = 0, segStart = null;
-                for (let k = si; k <= ei; k++) {
+                for (let k = tb.si; k <= tb.ei; k++) {
                     const t = globalData.yTotalRaw[k];
                     if (segStart === null) {
                         if (t !== 0 && t !== null) { segStart = k; if (entry === null) entry = k; }
                     } else if (t === 0) { inSwing += swingIn(segStart, k); exit = k; segStart = null; }
                 }
-                if (segStart !== null) { inSwing += swingIn(segStart, ei); exit = null; }
+                if (segStart !== null) { inSwing += swingIn(segStart, tb.ei); exit = null; }
                 return {
                     rate: pE - pB, lots: Math.round(fee / FEE_PER_LOT), cum: pE, entry, exit,
                     swing: (b => Math.round(calculateSwing100(globalData.yPriceClean.slice(b.si, b.ei + 1), 100)))(swingBounds(i)),
@@ -1056,8 +1063,8 @@
                 }
                 done++; sumLots += s.lots; cumRate = s.cum;
                 if (s.rate > 0) win++; else if (s.rate < 0) lose++;
-                const entryTxt = s.entry !== null ? timeOf(s.entry) : dash;
-                const exitTxt = s.exit !== null ? timeOf(s.exit)
+                const entryTxt = s.entry !== null ? clockText(s.entry) : dash;
+                const exitTxt = s.exit !== null ? clockText(s.exit)
                               : s.entry !== null ? '<span class="text-blue-500 font-bold">持倉中</span>' : dash;
                 const tag = i === latestIdx ? '<span class="hidden sm:inline ml-1.5 text-[10px] font-bold text-blue-500">最新</span>' : '';
                 const active = i === currentSessionIdx ? 'bg-orange-50' : 'hover:bg-slate-50';
@@ -1125,7 +1132,6 @@
             const spr = globalData.yProfit.slice(si, ei + 1).filter(v => v !== null);
             const sw = globalData.yTimeWed.slice(si, ei + 1).filter(v => v !== null);
             const sf = globalData.yTimeFri.slice(si, ei + 1).filter(v => v !== null);
-            const stRaw = globalData.yTotalRaw.slice(si, ei + 1);
 
             const sb = swingBounds(idx);
             const swingVal = calculateSwing100(globalData.yPriceClean.slice(sb.si, sb.ei + 1), 100);
@@ -1160,9 +1166,10 @@
 
             // 進場 = 第一次進場、出場 = 最後一次出場；仍持倉顯示「持倉中」
             let entry = "--", exit = "--", holding = false;
-            for(let i=0; i<stRaw.length; i++) {
-                if(stRaw[i] !== 0 && stRaw[i] !== null) { if(entry === "--") entry = sx[i].split(' ')[1] || sx[i]; holding = true; }
-                else if(holding && stRaw[i] === 0) { exit = sx[i].split(' ')[1] || sx[i]; holding = false; }
+            for (let k = sb.si; k <= sb.ei; k++) {
+                const t = globalData.yTotalRaw[k];
+                if(t !== 0 && t !== null) { if(entry === "--") entry = clockText(k); holding = true; }
+                else if(holding && t === 0) { exit = clockText(k); holding = false; }
             }
             if(holding) exit = "持倉中";
             document.getElementById('stat-entry').innerText = entry;
