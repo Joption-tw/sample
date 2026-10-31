@@ -12,10 +12,24 @@
             function apply() {
                 const on = side < 600 && portrait.matches;
                 document.documentElement.classList.toggle('m-portrait', on);
-                meta.setAttribute('content', on ? `width=1040, initial-scale=${(side / 1040).toFixed(3)}, minimum-scale=${(side / 1040).toFixed(3)}, maximum-scale=6` : 'width=device-width, initial-scale=1.0');
+                meta.setAttribute('content', on ? `width=1040, initial-scale=${(side / 1040).toFixed(3)}, minimum-scale=${(side / 1040).toFixed(3)}, maximum-scale=6` : 'width=device-width, initial-scale=1.0, viewport-fit=cover');
+                syncVisible();
+            }
+            // 手機橫向用：實際可視範圍（放大時不跟著變，否則版面會亂跳）
+            function syncVisible() {
+                const v = window.visualViewport;
+                if (!v || v.scale > 1.01) return;
+                const st = document.documentElement.style;
+                st.setProperty('--vv-top', `${v.offsetTop}px`);
+                st.setProperty('--vv-h', `${v.height}px`);
+                if (!portrait.matches) window.scrollTo(0, 0);
             }
             apply();
             portrait.addEventListener('change', apply);
+            if (window.visualViewport) {
+                visualViewport.addEventListener('resize', syncVisible);
+                visualViewport.addEventListener('scroll', syncVisible);
+            }
         })();
     </script>
     <title>雙賣平衡 即時績效 (歐大專業版) - V1.9.6</title>
@@ -162,9 +176,12 @@
             body { padding: 3px !important; }
 
             /* 整頁塞進「可視視窗高度」(svh：已扣掉瀏覽器工具列)，用 flex 直向排列 */
+            /* 固定貼齊實際可視範圍的最上方（iPhone 轉橫向時頁面可能被往下推）；左右只讓開瀏海 */
             #capture-root {
-                height: 100vh; height: 100svh;
-                max-height: 100vh; max-height: 100svh;
+                position: fixed !important; top: calc(var(--vv-top, 0px) + 2px);
+                left: max(3px, env(safe-area-inset-left)); right: max(3px, env(safe-area-inset-right));
+                width: auto !important;
+                height: calc(var(--vv-h, 100vh) - 4px); max-height: calc(var(--vv-h, 100vh) - 4px);
                 display: flex !important; flex-direction: column !important;
                 gap: 2px !important; padding: 0 !important; margin: 0 auto !important;
                 max-width: 100% !important; overflow: hidden !important;
