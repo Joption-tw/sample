@@ -24,6 +24,23 @@ function parseCSVLine(text) {
 
 await mkdir(DIR, { recursive: true });
 
+// 週五合約換約時，試算表會清掉舊合約那幾盤的週五時價（col 53）：這一週已存過的值留著
+function keepOldFri(text, oldText) {
+    const old = new Map();
+    for (const line of oldText.split('\n').slice(1)) {
+        const c = parseCSVLine(line);
+        if (c.length >= 54 && c[8] && c[53]) old.set(c[0], c[53]);
+    }
+    const cell = v => /[",]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    return text.split('\n').map((line, i) => {
+        if (i === 0) return line;
+        const c = parseCSVLine(line);
+        if (c.length < 54 || !c[8] || c[53] || !old.has(c[0])) return line;
+        c[53] = old.get(c[0]);
+        return c.map(cell).join(',');
+    }).join('\n');
+}
+
 // 把一份 CSV 存到 history/<週>.csv；isBackup：備份只補比較完整的資料，筆數一樣就不動
 async function archive(raw, label, isBackup) {
     const text = raw.replace(/\r\n/g, '\n');
@@ -41,13 +58,14 @@ async function archive(raw, label, isBackup) {
 
     const file = `${DIR}/${week}.csv`;
     // 同一週只會越存越完整：已存的筆數比較多時不覆蓋（避免試算表異常時蓋掉好資料）
-    let oldRows = 0;
+    let oldRows = 0, oldText = '';
     try {
-        oldRows = (await readFile(file, 'utf8')).split('\n').slice(1)
+        oldText = await readFile(file, 'utf8');
+        oldRows = oldText.split('\n').slice(1)
             .filter(l => { const c = parseCSVLine(l); return c.length >= 54 && c[8]; }).length;
     } catch {}
     if (isBackup ? rows > oldRows : rows >= oldRows) {
-        await writeFile(file, text);
+        await writeFile(file, keepOldFri(text, oldText));
         console.log(`${label}：已存檔 ${file}（${rows} 筆，原 ${oldRows} 筆）`);
     } else {
         console.log(`${label}：略過 ${file}（${rows} 筆，已存 ${oldRows} 筆）`);

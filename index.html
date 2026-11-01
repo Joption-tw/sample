@@ -761,6 +761,21 @@
             return smoothed;
         }
 
+        // 週五合約換約時，試算表會清掉舊合約那幾盤（週三晚～週五早）的週五時價；本週改從存檔補回
+        let archiveFri = { week: '', vals: [] };
+        async function fillFriFromArchive(raw) {
+            const week = normWeek(raw.weekStart);
+            if (!week) return;
+            if (archiveFri.week !== week) {
+                archiveFri = { week, vals: [] };
+                try {
+                    const res = await fetch(`${HISTORY_BASE}${week}.csv?t=${Date.now()}`);
+                    if (res.ok) archiveFri.vals = (await res.text()).split(/\r?\n/).filter(line => line.trim() !== '').slice(1).map(parseCSVLine).filter(c => c.length >= 54).map(c => c[8] ? rawNumeric(c[53]) : null);
+                } catch (e) {}
+            }
+            raw.yTimeFri.forEach((v, i) => { if (v === null && raw.yClock[i] !== null && archiveFri.vals[i] != null) raw.yTimeFri[i] = archiveFri.vals[i]; });
+        }
+
         async function fetchData() {
             const loading = document.getElementById('loading-overlay');
             loading.classList.remove('hidden'); loading.style.opacity = '1';
@@ -792,6 +807,7 @@
                         raw.yTotalRaw.push(totalPoint);
                     }
                 }
+                if (!viewWeek) await fillFriFromArchive(raw);
                 raw.yPriceClean = despikePrice(raw.yPriceRaw);
                 raw.yPrice = [...raw.yPriceClean];
                 ['yPrice', 'yProfit', 'yTimeWed', 'yTimeFri', 'yTotal'].forEach(key => {
@@ -1089,8 +1105,8 @@
             let rows = '', prevEnd = null, latestIdx = -1;
             let sumLots = 0, cumRate = null, win = 0, lose = 0, done = 0;
             const stats = rowRanges.map((r, i) => {
-                const { si, ei } = sessionBounds(i);
-                if (si >= n || !clockRange(i)) return null;   // 週六凌晨最後兩筆標籤是「一 8:45」，不算週一開盤
+                if (sessionBounds(i).si >= n || !clockRange(i)) return null;
+                const { si, ei } = clockRange(i);   // 收盤用實際時間切，時間標籤會漏掉盤尾最後兩筆   // 週六凌晨最後兩筆標籤是「一 8:45」，不算週一開盤
                 const pE = lastAt(globalData.yProfitRaw, ei, si);
                 if (pE === null) return null;
                 const pB = prevEnd ? prevEnd.p : firstIn(globalData.yProfitRaw, si, ei);
@@ -1114,7 +1130,7 @@
                     rate: pE - pB, lots: Math.round(fee / FEE_PER_LOT), cum: pE, entry, exit,
                     swing: (b => Math.round(calculateSwing100(globalData.yPriceClean.slice(b.si, b.ei + 1), 100)))(swingBounds(i)),
                     inSwing: Math.round(inSwing),
-                    ba: lastChg(globalData.yTimeWed, si, ei), bb: lastChg(globalData.yTimeFri, si, ei),
+                    ba: (b => lastChg(globalData.yTimeWed, b.si, b.ei))(sessionBounds(i)), bb: (b => lastChg(globalData.yTimeFri, b.si, b.ei))(sessionBounds(i)),   // 週五早最後一筆已換成新合約，時價不用實際時間切
                     vix: hasVix ? vixOfDay(sessionDate(i)) : null
                 };
             });
@@ -1126,7 +1142,7 @@
                 if (!s) {
                     const blanks = hasVix ? 8 : 7;
                     rows += `<tr class="border-b border-slate-100 text-slate-300">` + td(dateOf(i)) + td(label, 'font-black') +
-                            td('尚未開盤', 'text-center') + td('--', 'text-center') + td('--', 'text-right').repeat(blanks) + `</tr>`;
+                            td(viewWeek ? '無資料' : '尚未開盤', 'text-center') + td('--', 'text-center') + td('--', 'text-right').repeat(blanks) + `</tr>`;
                     return;
                 }
                 done++; sumLots += s.lots; cumRate = s.cum;
