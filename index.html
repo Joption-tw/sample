@@ -238,7 +238,7 @@
 
             /* 十個盤別按鈕一整排：壓扁 */
             #ui-switcher-container { padding: 1px !important; }
-            #session-switcher { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; gap: 2px !important; }
+            #session-switcher { grid-template-columns: repeat(11, minmax(0, 1fr)) !important; gap: 2px !important; }
             .session-btn { padding: 2px 2px !important; font-size: 10px !important; border-radius: 0.3rem !important; }
 
             /* 圖表卡：撐滿剩餘高度 */
@@ -391,7 +391,7 @@
         </div>
 
         <div class="glass-card p-1 sm:p-1.5" id="ui-switcher-container">
-            <div id="session-switcher" class="grid grid-cols-5 md:grid-cols-10 gap-1"></div>
+            <div id="session-switcher" class="grid grid-cols-5 md:grid-cols-11 gap-1"></div>
         </div>
 
         <div class="glass-card p-2 md:p-4 relative overflow-hidden">
@@ -776,6 +776,21 @@
             raw.yTimeFri.forEach((v, i) => { if (v === null && raw.yClock[i] !== null && archiveFri.vals[i] != null) raw.yTimeFri[i] = archiveFri.vals[i]; });
         }
 
+        // 週三晚入金重設之前（空手、資產還是上週留下的）不算本週獲利：
+        // 第一盤裡第一次「空手且獲利率從非 0 跳成 0」的那筆就是重設，之前的獲利率當作沒有
+        function dropBeforeReset(raw) {
+            const end = Math.min(rowRanges[0].end, raw.x.length - 1);
+            for (let i = 1; i <= end; i++) {
+                const p = raw.yProfitRaw[i], q = raw.yProfitRaw[i - 1];
+                if (p === null || q === null) continue;
+                if (raw.yTotalRaw[i] !== 0 || raw.yTotalRaw[i - 1] !== 0) return;   // 已經開始交易：沒有重設
+                if (p === 0 && q !== 0) {
+                    for (let k = 0; k < i; k++) { raw.yProfitRaw[k] = null; raw.yProfit[k] = null; }
+                    return;
+                }
+            }
+        }
+
         async function fetchData() {
             const loading = document.getElementById('loading-overlay');
             loading.classList.remove('hidden'); loading.style.opacity = '1';
@@ -807,6 +822,7 @@
                         raw.yTotalRaw.push(totalPoint);
                     }
                 }
+                dropBeforeReset(raw);
                 if (!viewWeek) await fillFriFromArchive(raw);
                 raw.yPriceClean = despikePrice(raw.yPriceRaw);
                 raw.yPrice = [...raw.yPriceClean];
@@ -835,6 +851,11 @@
                             btn.onclick = () => selectSession(i);
                             switcher.appendChild(btn);
                         });
+                        const weekBtn = document.createElement('button');
+                        weekBtn.className = 'session-btn week col-span-5 md:col-span-1';
+                        weekBtn.innerText = '全週';
+                        weekBtn.onclick = () => selectSession(WEEK_IDX);
+                        switcher.appendChild(weekBtn);
                         let autoIdx = viewWeek ? lastSessionWithData() : getAutoSessionIndex();
                         if (autoIdx >= 0 && (rowRanges[autoIdx].start - 2) >= globalData.x.length) {
                             let lv = rowRanges.length - 1;
@@ -1009,6 +1030,20 @@
             return si === -1 ? null : { si, ei };
         }
         const swingBounds = idx => clockRange(idx) || sessionBounds(idx);
+
+        // 「全週」按鈕（排在十個盤別後面）：從周三晚第一筆到最後一筆有資料的；百點震幅 = 各盤加總（盤與盤之間的跳空不算）
+        const WEEK_IDX = rowRanges.length;
+        function weekBounds() {
+            let ei = -1;
+            globalData.yClock.forEach((m, i) => { if (m !== null) ei = i; });
+            return ei === -1 ? null : { si: 0, ei };
+        }
+        function weekSwing() {
+            return rowRanges.reduce((sum, r, i) => {
+                const b = clockRange(i);
+                return b ? sum + calculateSwing100(globalData.yPriceClean.slice(b.si, b.ei + 1), 100) : sum;
+            }, 0);
+        }
 
         // 進出場時間顯示試算表的「更新時間」（實際時間）；沒有時才退回時間標籤
         function clockText(k) {
@@ -1208,7 +1243,9 @@
             if (!globalData || idx === -1 || !myChart) return;
             currentSessionIdx = idx;
             document.querySelectorAll('.session-btn').forEach((btn, i) => btn.classList.toggle('active', i === idx));
-            const { si, ei } = sessionBounds(idx);
+            const wb = idx === WEEK_IDX ? weekBounds() : null;
+            if (idx === WEEK_IDX && !wb) return;
+            const { si, ei } = wb || sessionBounds(idx);
             if (si >= globalData.x.length) return;
 
             const sx = globalData.x.slice(si, ei + 1);
@@ -1217,13 +1254,13 @@
             const sw = globalData.yTimeWed.slice(si, ei + 1).filter(v => v !== null);
             const sf = globalData.yTimeFri.slice(si, ei + 1).filter(v => v !== null);
 
-            const sb = swingBounds(idx);
-            const swingVal = calculateSwing100(globalData.yPriceClean.slice(sb.si, sb.ei + 1), 100);
+            const sb = wb || swingBounds(idx);
+            const swingVal = wb ? weekSwing() : calculateSwing100(globalData.yPriceClean.slice(sb.si, sb.ei + 1), 100);
             document.getElementById('stat-swing').innerText = Math.round(swingVal).toLocaleString();
 
             document.getElementById('stat-profit').innerText = spr.length > 0 ? `${spr[spr.length - 1].toFixed(2)}%` : "--%";
             const sps = globalData.yProfitSess.slice(si, ei + 1).filter(v => v !== null);
-            const sessionPerf = sps.length > 0 ? sps[sps.length - 1] : 0;
+            const sessionPerf = wb ? (spr.length > 0 ? spr[spr.length - 1] : 0) : (sps.length > 0 ? sps[sps.length - 1] : 0);   // 全週 = 本週累積
             const perfEl = document.getElementById('stat-max');
             perfEl.innerText = `${sessionPerf.toFixed(2)}%`;
             perfEl.className = `text-base sm:text-lg font-black stat-value ${sessionPerf >= 0 ? 'text-rose-600' : 'text-emerald-600'}`;
@@ -1516,7 +1553,7 @@
             renderSessionTable();
             if (full) { updateChartUI(); return; }
             myChart.setOption({ series: [{ name: 'VIX', data: axisState.rVix ? globalData.yVix : [] }] });
-            if (currentSessionIdx === -1 || !axisState.rVix) return;
+            if (currentSessionIdx === -1 || currentSessionIdx === WEEK_IDX || !axisState.rVix) return;
             const r = rowRanges[currentSessionIdx];
             const f = fitRange(globalData.yVix.slice(r.start - 2, r.end - 1));
             if (!f) return;
