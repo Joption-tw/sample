@@ -299,6 +299,16 @@
             body.m-page-2 #session-table-card th:nth-child(-n+9) .sm\:inline { display: none !important; }
             body.m-page-2 #session-table-body .sm\:inline { display: none !important; }
         }
+        /* 橡皮擦（只有監控中心開通橡皮擦的人看得到按鈕） */
+        #erase-wrap { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin: -6px 4px 6px; }
+        #erase-toggle { border: 1px solid #cbd5e1; border-radius: 999px; padding: 3px 12px; background: #fff; font-size: 12px; font-weight: 900; color: #475569; }
+        #erase-toggle.on { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+        #erase-bar { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 10px; font-size: 12px; font-weight: 700; color: #334155; }
+        #erase-bar select, #erase-bar button { border: 1px solid #cbd5e1; border-radius: 8px; padding: 3px 10px; background: #fff; font-weight: 800; font-size: 12px; color: #334155; }
+        #erase-bar button.do { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+        #erase-bar button[disabled] { opacity: .45; cursor: default; }
+        #erase-bar .msg { color: #e11d48; }
+        #erase-bar .end { margin-left: auto; }
     </style>
 </head>
 <body class="p-1.5 sm:p-4">
@@ -422,6 +432,7 @@
                 </div>
             </div>
 
+            <div id="erase-wrap"><button type="button" id="erase-toggle" onclick="toggleErase()" style="display:none">橡皮擦</button><div id="erase-bar" style="display:none"></div></div>
             <div id="performance-chart"></div>
         </div>
 
@@ -791,13 +802,179 @@
             }
         }
 
-        async function fetchData() {
-            const loading = document.getElementById('loading-overlay');
-            loading.classList.remove('hidden'); loading.style.opacity = '1';
+        // ===== 橡皮擦：在圖上框選不合理的點擦掉 =====
+        // 跟監控中心共用登入和「橡皮擦」權限（開通名單橡皮擦欄打勾的人），紀錄存在監控中心的 Apps Script，
+        // 每週一份，列號是績效表第幾筆；每個人開頁都會套用，擦掉的點用前後正常的點補直線（總點數沿用前一筆）。
+        const ERASE_API = 'https://script.google.com/macros/s/AKfycbz7zFm3gVFAq_-y8pxc873AeK0jAWyyrPbUJ9PL3N4vdllJ55rKnOBlbSXAP5zM99tlpQ/exec';
+        const ERASE_TOKEN_KEY = 'joption-monitor-token';   // 同網域（joption-tw.github.io）登入過監控中心就直接有
+        const ERASE_ARR = { '期指': ['yPriceRaw'], '總點數': ['yTotal', 'yTotalRaw'], '獲利率': ['yProfit', 'yProfitRaw'], '週三時價': ['yTimeWed'], '週五時價': ['yTimeFri'] };
+        const ERASE_SHOW = { '期指': 'yPrice', '總點數': 'yTotal', '獲利率': 'yProfitSess', '週三時價': 'yTimeWed', '週五時價': 'yTimeFri' };
+        const ERASE_ON = { '期指': 'lIdx', '總點數': 'lTot', '獲利率': 'rPrf', '週三時價': 'rTmv', '週五時價': 'rTmv' };
+        const eraseLists = {};
+        let canErase = false, eraseOn = false, eraseSeries = '期指', erasePending = null, eraseBusy = false, eraseMsg = '', eraseTokenMem = null;
+        let csvCache = null, keepSession = null;
+
+        function getEraseToken() { try { return localStorage.getItem(ERASE_TOKEN_KEY) || eraseTokenMem; } catch (e) { return eraseTokenMem; } }
+        async function eraseApi(body) {
+            const res = await fetch(ERASE_API, { method: 'POST', body: JSON.stringify(body) });
+            if (!res.ok) throw new Error(res.status);
+            return res.json();
+        }
+        async function loadEraseList(week) {
+            const token = getEraseToken();
+            const r = await eraseApi({ action: 'demoErased', week, token: token || undefined });
+            if (r && r.ok) { eraseLists[week] = r.list || []; canErase = !!r.canErase; }
+            return r;
+        }
+        // 擦掉的點：前後 60 筆內找沒被擦的點補直線；總點數是口數，不補直線，沿用前一筆
+        function applyErase(raw, week) {
+            const n = raw.x.length, marks = {};
+            (eraseLists[week] || []).forEach(it => {
+                if (!ERASE_ARR[it.s]) return;
+                const set = marks[it.s] = marks[it.s] || new Set();
+                (it.r || []).forEach(([a, b]) => { for (let i = a; i <= Math.min(b, n - 1); i++) set.add(i); });
+            });
+            Object.keys(marks).forEach(s => ERASE_ARR[s].forEach(key => {
+                const arr = raw[key], bad = marks[s], src = [...arr], hold = key.startsWith('yTotal');
+                const ok = i => i >= 0 && i < n && !bad.has(i) && src[i] !== null;
+                bad.forEach(i => {
+                    if (src[i] === null) return;
+                    let l = i - 1, r = i + 1;
+                    while (l >= 0 && i - l <= 60 && !ok(l)) l--;
+                    while (r < n && r - i <= 60 && !ok(r)) r++;
+                    const hasL = i - l <= 60 && ok(l), hasR = r - i <= 60 && ok(r);
+                    if (hasL && hasR && !hold) arr[i] = src[l] + (src[r] - src[l]) * (i - l) / (r - l);
+                    else arr[i] = hasL ? src[l] : hasR ? src[r] : null;
+                });
+            }));
+        }
+        function refreshErase() { keepSession = currentSessionIdx; fetchData(true); }
+
+        function eraseVisible() { return canErase || /[?&]erase\b/.test(location.search); }
+        let eraseBoxShown = false;
+        function clearEraseBox() { if (myChart && eraseBoxShown) myChart.setOption({ graphic: [{ id: 'erase-box', $action: 'remove' }] }); eraseBoxShown = false; }
+        function renderEraseBar() {
+            const btn = document.getElementById('erase-toggle'), bar = document.getElementById('erase-bar');
+            if (!btn || !bar) return;
+            btn.style.display = eraseVisible() ? '' : 'none';
+            btn.classList.toggle('on', eraseOn);
+            bar.style.display = eraseOn ? '' : 'none';
+            if (!eraseOn) return;
+            const names = Object.keys(ERASE_SHOW).filter(n => axisState[ERASE_ON[n]]);
+            if (!names.includes(eraseSeries)) eraseSeries = names[0] || '期指';
+            const p = erasePending;
+            let html;
+            if (!names.length) html = '<span>先在上面打開要擦的線</span>';
+            else {
+                html = '<label for="erase-series">要擦哪條線</label><select id="erase-series" onchange="eraseSeries = this.value; erasePending = null; clearEraseBox(); renderEraseBar()">' +
+                    names.map(n => `<option${n === eraseSeries ? ' selected' : ''}>${n}</option>`).join('') + '</select>';
+                if (eraseBusy) html += '<span>處理中…</span>';
+                else if (!p) html += '<span>在圖上拉一個框，框到這條線的點會擦掉</span>';
+                else if (!p.count) html += '<span>框裡沒有這條線的點，再拉一次</span>';
+                else html += `<span>擦掉${p.s}的 <b>${p.count}</b> 個點（${p.from}～${p.to}）？</span><button type="button" class="do" onclick="eraseCommit()">擦掉</button><button type="button" onclick="erasePending = null; clearEraseBox(); renderEraseBar()">取消</button>`;
+            }
+            const done = (eraseLists[globalData && globalData.eraseWeek] || []).length;
+            if (eraseMsg) html += `<span class="msg">${eraseMsg}</span>`;
+            html += `<button type="button" class="end" onclick="eraseUndo()"${done && !eraseBusy ? '' : ' disabled'}>復原上一步</button><button type="button" onclick="toggleErase()">結束</button>`;
+            bar.innerHTML = html;
+        }
+        async function eraseLogin() {
+            const email = prompt('橡皮擦用監控中心開通的 Email 登入：');
+            if (!email) return false;
             try {
-                const response = await fetch(viewWeek ? `${HISTORY_BASE}${viewWeek}.csv?t=${Date.now()}` : `${CSV_URL}${CSV_URL.includes('?') ? '&' : '?'}t=${Date.now()}`);
-                if (!response.ok) throw new Error(`資料讀取失敗：${response.status}`);
-                const text = await response.text();
+                const r = await eraseApi({ action: 'login', email: email.trim() });
+                if (!r.ok) { alert(r.pending ? '這個 Email 還沒開通。' : (r.msg || '登入失敗。')); return false; }
+                eraseTokenMem = r.token;
+                try { localStorage.setItem(ERASE_TOKEN_KEY, r.token); } catch (e) {}
+                await loadEraseList(globalData.eraseWeek);
+                if (!canErase) { alert('這個 Email 沒有橡皮擦權限。'); return false; }
+                return true;
+            } catch (e) { alert('連不上，稍後再試。'); return false; }
+        }
+        async function toggleErase() {
+            if (!eraseOn && !canErase && !(await eraseLogin())) return;
+            eraseOn = !eraseOn; erasePending = null; eraseMsg = '';
+            clearEraseBox();
+            updateChartUI();
+        }
+        function eraseFail(r) {
+            if (r.auth) canErase = false;
+            return r.auth ? '登入過期，重新整理後再登入' : r.full ? '這週擦太多次，存不下了' : r.busy ? '伺服器忙，稍後再按一次' : '沒有成功';
+        }
+        async function eraseCommit() {
+            const p = erasePending, week = globalData.eraseWeek;
+            if (!p || !p.count || eraseBusy) return;
+            eraseBusy = true; eraseMsg = ''; renderEraseBar();
+            try {
+                const r = await eraseApi({ action: 'demoErase', token: getEraseToken(), week, s: p.s, r: p.r });
+                if (r.ok) { eraseLists[week] = r.list; erasePending = null; clearEraseBox(); eraseBusy = false; refreshErase(); return; }
+                eraseMsg = eraseFail(r);
+            } catch (e) { eraseMsg = '連不上，稍後再試'; }
+            eraseBusy = false; renderEraseBar();
+        }
+        async function eraseUndo() {
+            const week = globalData.eraseWeek;
+            if (eraseBusy) return;
+            eraseBusy = true; eraseMsg = ''; renderEraseBar();
+            try {
+                const r = await eraseApi({ action: 'demoUnerase', token: getEraseToken(), week });
+                if (r.ok) { eraseLists[week] = r.list; erasePending = null; clearEraseBox(); eraseBusy = false; refreshErase(); return; }
+                eraseMsg = eraseFail(r);
+            } catch (e) { eraseMsg = '連不上，稍後再試'; }
+            eraseBusy = false; renderEraseBar();
+        }
+        // 拉框：框的左右決定哪幾筆，上下用「要擦哪條線」那條線的軸換算；期指連原始值落在框裡的也算（被平滑蓋掉的怪值）
+        function bindEraseDrag() {
+            const zr = myChart.getZr();
+            let start = null;
+            eraseBoxShown = false;
+            const box = (a, b) => ({ x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(a[0] - b[0]), height: Math.abs(a[1] - b[1]) });
+            zr.on('mousedown', e => { if (!eraseOn || eraseBusy) return; start = [e.offsetX, e.offsetY]; erasePending = null; renderEraseBar(); });
+            zr.on('mousemove', e => {
+                if (!eraseOn || !start) return;
+                eraseBoxShown = true;
+                myChart.setOption({ graphic: [{ id: 'erase-box', type: 'rect', shape: box(start, [e.offsetX, e.offsetY]), style: { fill: 'rgba(245, 158, 11, 0.18)', stroke: '#b45309', lineDash: [4, 3] }, z: 100, silent: true }] });
+            });
+            zr.on('mouseup', e => {
+                if (!eraseOn || !start) return;
+                const a = start, b = [e.offsetX, e.offsetY];
+                start = null;
+                if (Math.abs(a[0] - b[0]) < 4 && Math.abs(a[1] - b[1]) < 4) { clearEraseBox(); return; }
+                pickErase(a, b);
+            });
+        }
+        function pickErase(a, b) {
+            const s = eraseSeries, p1 = myChart.convertFromPixel({ seriesName: s }, a), p2 = myChart.convertFromPixel({ seriesName: s }, b);
+            if (!p1 || !p2) return;
+            const i0 = Math.max(0, Math.ceil(Math.min(p1[0], p2[0]))), i1 = Math.min(globalData.x.length - 1, Math.floor(Math.max(p1[0], p2[0])));
+            const lo = Math.min(p1[1], p2[1]), hi = Math.max(p1[1], p2[1]);
+            const show = globalData[ERASE_SHOW[s]], raw = s === '期指' ? globalData.yPriceRaw : null;
+            const inBox = v => v !== null && v !== undefined && v >= lo && v <= hi;
+            const r = [];
+            let count = 0;
+            for (let i = i0; i <= i1; i++) {
+                if (!inBox(show[i]) && !(raw && inBox(raw[i]))) continue;
+                count++;
+                const last = r[r.length - 1];
+                if (last && last[1] === i - 1) last[1] = i; else r.push([i, i]);
+            }
+            erasePending = count ? { s, r, count, from: globalData.x[r[0][0]], to: globalData.x[r[r.length - 1][1]] } : { count: 0 };
+            renderEraseBar();
+        }
+
+        async function fetchData(reuse = false) {
+            const loading = document.getElementById('loading-overlay');
+            if (!reuse) { loading.classList.remove('hidden'); loading.style.opacity = '1'; }
+            try {
+                const cacheKey = viewWeek || 'live';
+                let text;
+                if (reuse && csvCache && csvCache.key === cacheKey) text = csvCache.text;   // 擦完重算不用再下載
+                else {
+                    const response = await fetch(viewWeek ? `${HISTORY_BASE}${viewWeek}.csv?t=${Date.now()}` : `${CSV_URL}${CSV_URL.includes('?') ? '&' : '?'}t=${Date.now()}`);
+                    if (!response.ok) throw new Error(`資料讀取失敗：${response.status}`);
+                    text = await response.text();
+                    csvCache = { key: cacheKey, text };
+                }
                 const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
                 const raw = { x: [], yClock: [], yPrice: [], yProfit: [], yTimeWed: [], yTimeFri: [], yTotal: [], yTotalRaw: [], yPriceRaw: [], yProfitRaw: [], yFeeRaw: [] };
                 for (let i = 1; i < lines.length; i++) {
@@ -824,6 +1001,15 @@
                 }
                 dropBeforeReset(raw);
                 if (!viewWeek) await fillFriFromArchive(raw);
+                raw.eraseWeek = viewWeek || normWeek(raw.weekStart);
+                if (raw.eraseWeek && !reuse) {
+                    // 橡皮擦紀錄最多等 4 秒，晚到的有變再重畫一次
+                    const before = JSON.stringify(eraseLists[raw.eraseWeek] || []);
+                    const req = loadEraseList(raw.eraseWeek).catch(() => null);
+                    const arrived = await Promise.race([req.then(() => true), new Promise(r => setTimeout(() => r(false), 4000))]);
+                    if (!arrived) req.then(() => { if (globalData && globalData.eraseWeek === raw.eraseWeek && JSON.stringify(eraseLists[raw.eraseWeek] || []) !== before) refreshErase(); else renderEraseBar(); });
+                }
+                applyErase(raw, raw.eraseWeek);
                 raw.yPriceClean = despikePrice(raw.yPriceRaw);
                 raw.yPrice = [...raw.yPriceClean];
                 ['yPrice', 'yProfit', 'yTimeWed', 'yTimeFri', 'yTotal'].forEach(key => {
@@ -856,13 +1042,15 @@
                         weekBtn.innerText = '全週';
                         weekBtn.onclick = () => selectSession(WEEK_IDX);
                         switcher.appendChild(weekBtn);
-                        let autoIdx = viewWeek ? lastSessionWithData() : getAutoSessionIndex();
+                        const kept = keepSession;
+                        keepSession = null;
+                        let autoIdx = kept !== null && kept >= 0 && kept < rowRanges.length ? kept : (viewWeek ? lastSessionWithData() : getAutoSessionIndex());
                         if (autoIdx >= 0 && (rowRanges[autoIdx].start - 2) >= globalData.x.length) {
                             let lv = rowRanges.length - 1;
                             while(lv >= 0 && (rowRanges[lv].start - 2) >= globalData.x.length) lv--;
                             autoIdx = lv;
                         }
-                        selectSession(autoIdx >= 0 ? autoIdx : 0);
+                        selectSession(kept === WEEK_IDX ? WEEK_IDX : (autoIdx >= 0 ? autoIdx : 0));
                         loadTableVix();
                         const updateStr = new Date().toLocaleString([], {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
                         document.getElementById('update-time').innerText = new Date().toLocaleString();
@@ -949,6 +1137,7 @@
             if (axisState.rVix) legendHtml += `<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span><span class="text-[10px] font-black text-slate-700">VIX</span></div>`;
             if (legendHtml === '') legendHtml = '<span class="text-[11px] text-slate-400">請選取顯示數據項目</span>';
             container.innerHTML = legendHtml;
+            renderEraseBar();
             buildYZoomBar();
             const leftAxesCount = (axisState.lIdx ? 1 : 0) + (axisState.lTot ? 1 : 0);
             const rightAxesCount = (axisState.rPrf ? 1 : 0) + (axisState.rTmv ? 1 : 0) + (axisState.rVix ? 1 : 0);
@@ -986,7 +1175,7 @@
                 { type: 'slider', yAxisIndex: 1, left: axisState.lIdx ? 40 : 0, width: 18, show: showYSlider && axisState.lTot },
                 { type: 'slider', yAxisIndex: 2, right: 0, width: 18, show: showYSlider && axisState.rPrf, filterMode: 'none' },
                 { type: 'slider', yAxisIndex: 3, right: axisState.rPrf ? 40 : 0, width: 18, show: showYSlider && axisState.rTmv },
-                { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile }
+                { type: 'inside', xAxisIndex: 0, moveOnMouseMove: !isMobile, zoomOnMouseWheel: !isMobile, disabled: eraseOn }
             ];
             const gridL = isMobile ? (leftAxesCount * 42 + 4)  : (leftAxesCount * 55 + 15);
             const gridR = isMobile ? (rightAxesCount * 42 + 4) : (rightAxesCount * 55 + 15);
@@ -1326,6 +1515,7 @@
             const chartDom = document.getElementById('performance-chart');
             if (myChart) myChart.dispose();
             myChart = echarts.init(chartDom);
+            bindEraseDrag();
             const markAreas = [];
             rowRanges.forEach(range => {
                 const start = range.start - 2;
